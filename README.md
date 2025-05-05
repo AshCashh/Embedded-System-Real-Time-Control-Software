@@ -34,6 +34,13 @@ Additional resources and documentation will be provided:
 - **MotorLib** – A custom motor driver library
 - Motor kit setup guide
 
+## Motor calcs and reference information
+
+### DRV8323 shunt resistor current calculation
+$$I_{\text{SOx}} = \frac{\frac{V_{\text{ref}}}{2} - V_{\text{SOx}}}{G_{\text{CSA}} \times R_{\text{SENSE}}}$$
+Gain setting set by 47K resistor to 10, resistor is 0.007 $\Omega$, $V_{\text{ref}}$ is 3.3V, $V_{\text{SOx}}$ is being measured
+$$I_{\text{SOx}} = \frac{\frac{3.3}{2} - V_{\text{SOx}}}{10 \times 0.007} $$
+$$I_{\text{SOx}} = \frac{1.65 - V_{\text{SOx}}}{0.7} $$
 ---
 
 **Course:** EGH456 Embedded Systems  
