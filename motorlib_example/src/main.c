@@ -74,7 +74,7 @@
 #include <motorlib.h>
 
 /*-----------------------------------------------------------*/
-
+extern void HallSensorHandler(void);
 /* The system clock frequency. */
 uint32_t g_ui32SysClock;
 
@@ -150,9 +150,50 @@ static void prvSetupHardware(void)
 
     /* Configure UART0 to send messages to terminal. */
     prvConfigureUART();
+    
+    /* Configure motor pins */
+    /* Enable GPIO ports for motor phases */
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOG);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOC);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOH);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOM);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPION);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOD);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOG) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOC) ||
+            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOH) ||
+            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOM) ||
+            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPION) ||
+            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA) ||
+            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOD) ||
+            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOE));
 
+    /* Configure phase pins as outputs */
+    GPIOPinTypeGPIOOutput(INLA);
+    GPIOPinTypeGPIOOutput(INHB);
+    GPIOPinTypeGPIOOutput(INLB);
+    GPIOPinTypeGPIOOutput(INHC);
+    GPIOPinTypeGPIOOutput(INLC);
+    GPIOPinTypeGPIOOutput(ENA);
+    /* Configure sense pins as inputs */
+    GPIOPinTypeGPIOInput(ISENCE_A);
+    GPIOPinTypeGPIOInput(ISENCE_B);
+    GPIOPinTypeGPIOInput(ISENCE_C);
+    /* Configure Hall sensor pins as inputs */
+    GPIOPinTypeGPIOInput(HALLA);
+    GPIOPinTypeGPIOInput(HALLB);
+    GPIOPinTypeGPIOInput(HALLC);
+    /* Disable brake */
+    GPIOPinWrite(INLC, GPIO_PIN_5);
+    /* Drive forwards */
+    GPIOPinWrite(INHC, 0);
     /* Set-up interrupts for hall sensors */
     prvConfigureHallInts();
+
 
 }
 /*-----------------------------------------------------------*/
@@ -177,10 +218,47 @@ static void prvConfigureHallInts( void )
 {
 
     /* Configure GPIO ports to trigger an interrupt on rising/falling or both edges. */
+    /* set interrupts on Hall sensor pins */
+    GPIOIntTypeSet(
+        GPIO_PORTM_BASE,
+        GPIO_PIN_3,
+        GPIO_BOTH_EDGES
+    );
+    GPIOIntTypeSet(
+        GPIO_PORTH_BASE,
+        GPIO_PIN_2,
+        GPIO_BOTH_EDGES
+    );
+    GPIOIntTypeSet(
+        GPIO_PORTN_BASE,
+        GPIO_PIN_2,
+        GPIO_BOTH_EDGES
+    );
+    /* raise interrupt priority for hallsensorhandler */
+    IntPrioritySet(INT_GPIOM, configMAX_SYSCALL_INTERRUPT_PRIORITY);
+    IntPrioritySet(INT_GPION, configMAX_SYSCALL_INTERRUPT_PRIORITY);
+    IntPrioritySet(INT_GPIOH, configMAX_SYSCALL_INTERRUPT_PRIORITY);
+    /* Enable the GPIO interrupt for Hall sensor pins. */
+    GPIOIntEnable(HALLA);
+    GPIOIntEnable(HALLB);
+    GPIOIntEnable(HALLC);
+    /* Enable the GPIO interrupt handler. */
+    GPIOIntRegister(GPIO_PORTM_BASE, HallSensorHandler);
+    GPIOIntRegister(GPIO_PORTH_BASE, HallSensorHandler);
+    GPIOIntRegister(GPIO_PORTN_BASE, HallSensorHandler);
+    /* Enable pullups */
+    GPIOPadConfigSet(HALLA,
+        GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+    GPIOPadConfigSet(HALLB,
+        GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+    GPIOPadConfigSet(HALLC,
+        GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+    /* Clear any prior interrupt flags. */
+    GPIOIntClear(HALLA);
+    GPIOIntClear(HALLB);
+    GPIOIntClear(HALLC);
 
-    /* Enable the interrupt for LaunchPad GPIO Port in the GPIO peripheral. */
 
-    /* Enable the Ports interrupt in the NVIC. */
 
     /* Enable global interrupts in the NVIC. */
     IntMasterEnable();

@@ -71,6 +71,11 @@
 
 #include "motorlib.h"
 
+
+/* variable storing hall sensor values */
+uint16_t hall_sensor_values[3] = {0, 0, 0};
+
+void HallSensorHandler(void);
 /*-----------------------------------------------------------*/
 
 /*
@@ -112,16 +117,31 @@ void vCreateMotorTask( void )
 
 static void prvMotorTask( void *pvParameters )
 {
-    uint16_t duty_value = 5;
+    /* 
+        TODO: investigate relationship with duty value and rpm
+    */
+    uint16_t duty_value = 20; 
     uint16_t period_value = 50;
 
     /* Initialise the motors and set the duty cycle (speed) in microseconds */
     initMotorLib(period_value);
     /* Set at >10% to get it to start */
     setDuty(duty_value);
-
+    /* start motor phase cycle */
+    enableMotor();
     /* Kick start the motor */
     // Do an initial read of the hall effect sensor GPIO lines
+    /* read hall sensor gpio lines */
+    UARTprintf("Getting hall values\n");
+    if (getHallSensorValues(hall_sensor_values)) {
+        UARTprintf("Hall sensor values: %d %d %d\n", hall_sensor_values[0], hall_sensor_values[1], hall_sensor_values[2]);
+    } else {
+        UARTprintf("Error reading hall sensor values\n");
+    }
+    updateMotor(hall_sensor_values[0],
+        hall_sensor_values[1],
+        hall_sensor_values[2]);
+
     // give the read hall effect sensor lines to updateMotor() to move the motor
     // one single phase
     // Recommendation is to use an interrupt on the hall effect sensors GPIO lines 
@@ -130,17 +150,19 @@ static void prvMotorTask( void *pvParameters )
     // Include the updateMotor function call in the ISR to achieve this behaviour.
 
     /* Motor test - ramp up the duty cycle from 10% to 100%, than stop the motor */
+    
     for (;;)
     {
 
-        if(duty_value>=period_value){
+        if(duty_value>=period_value / 2){
             stopMotor(1);
+            duty_value = 0;
             continue;
         }
 
         setDuty(duty_value);
         vTaskDelay(pdMS_TO_TICKS( 250 ));
-        duty_value++;
+        // duty_value++;
 
     }
 }
@@ -151,16 +173,20 @@ static void prvMotorTask( void *pvParameters )
 
 void HallSensorHandler(void)
 {
-    
-    //1. Read hall effect sensors
+    /* Get type of interrupt */
+    /*Using tmp value for now, 
+    TODO: switch to shared variable approach */
+    int hall_tmp[3] = {0, 0, 0};
+    uint32_t ui32StatusM = GPIOIntStatus(GPIO_PORTM_BASE, true);
+    uint32_t ui32StatusH = GPIOIntStatus(GPIO_PORTH_BASE, true);
+    uint32_t ui32StatusN = GPIOIntStatus(GPIO_PORTN_BASE, true);
+    /* read hall values */
+    getHallSensorValues(hall_tmp);
 
-    //
-    //2. call update motor to change to next phase
-    //   updateMotor(??, ??, ??);
-    
-    //3. Clear interrupt
-    // GPIOIntClear(??);
-
-    // Could also add speed sensing code here too.
-
+    /* update motor */
+    updateMotor(hall_tmp[0], hall_tmp[1], hall_tmp[2]);
+    /* clear interrupt */
+    GPIOIntClear(GPIO_PORTM_BASE, ui32StatusM);
+    GPIOIntClear(GPIO_PORTH_BASE, ui32StatusH);
+    GPIOIntClear(GPIO_PORTN_BASE, ui32StatusN);
 }
