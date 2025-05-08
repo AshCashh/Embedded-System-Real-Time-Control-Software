@@ -45,3 +45,5 @@ $$I_{\text{SOx}} = \frac{1.65 - V_{\text{SOx}}}{0.7} $$
 
 **Course:** EGH456 Embedded Systems  
 **University:** Queensland University of Technology (QUT)
+
+page 31 drv8323 for motors

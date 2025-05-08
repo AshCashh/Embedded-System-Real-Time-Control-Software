@@ -73,7 +73,7 @@
 
 
 /* variable storing hall sensor values */
-uint16_t hall_sensor_values[3] = {0, 0, 0};
+int32_t hall_sensor_values[3] = {0, 0, 0};
 
 void HallSensorHandler(void);
 /*-----------------------------------------------------------*/
@@ -120,7 +120,7 @@ static void prvMotorTask( void *pvParameters )
     /* 
         TODO: investigate relationship with duty value and rpm
     */
-    uint16_t duty_value = 20; 
+    uint16_t duty_value = 20; //25 starts it unaided
     uint16_t period_value = 50;
 
     /* Initialise the motors and set the duty cycle (speed) in microseconds */
