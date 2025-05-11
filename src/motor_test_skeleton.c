@@ -57,6 +57,7 @@
 /* Kernel includes. */
 #include "FreeRTOS.h"
 #include "task.h"
+#include "semphr.h"
 
 /* Hardware includes. */
 #include "inc/hw_ints.h"
@@ -73,17 +74,27 @@
 
 #include "motorlib.h"
 
+#define BUTTON_DUTY_INCREMENT 5
+typedef struct
+{
+    SemaphoreHandle_t mutex;
+    volatile uint16_t duty_value;
+    uint16_t period_value;
+    bool breaks_enabled;
+} Motor_Struc;
+
+Motor_Struc motor_ctrl;
+
 /*
  * Time stamp global variable.
  */
 volatile uint32_t g_ui32TimeStamp = 0;
-
-volatile uint16_t duty_value = 15; // 25 starts it unaided
-volatile uint16_t period_value = 50;
-
-volatile bool Breaking = false;
+volatile uint32_t ui32ButtonStatus;
 
 extern volatile uint32_t g_ui32SysClock;
+
+/*Semaphores intialised in main*/
+extern SemaphoreHandle_t xButtonSemaphore;
 
 /*
  * Global variable to log the last GPIO button pressed.
@@ -100,6 +111,7 @@ void HallSensorHandler(void);
  * The tasks as described in the comments at the top of this file.
  */
 static void prvMotorTask(void *pvParameters);
+static void prvButtonTask(void *pvParameters);
 
 /*
  * Called by main() to create the Hello print task.
@@ -118,7 +130,6 @@ static void prvConfigureButton(void);
 
 void vCreateMotorTask(void)
 {
-
     /* Create the task as described in the comments at the top of this file.
      *
      * The xTaskCreate parameters in order are:
@@ -129,32 +140,46 @@ void vCreateMotorTask(void)
      *  - No parameter passed to the task
      *  - The priority assigned to the task.
      *  - The task handle is NULL */
-    
+
     xTaskCreate(prvMotorTask,
-                "Hello",
+                "MotorTask",
                 configMINIMAL_STACK_SIZE,
                 NULL,
                 tskIDLE_PRIORITY + 1,
+                NULL);
+    xTaskCreate(prvButtonTask,
+                "ButtonTask",
+                configMINIMAL_STACK_SIZE,
+                NULL,
+                tskIDLE_PRIORITY + 2,
                 NULL);
 }
 /*-----------------------------------------------------------*/
 
 static void prvMotorTask(void *pvParameters)
 {
-    /*
-        TODO: investigate relationship with duty value and rpm
-    */
-    // uint16_t duty_value = 15; // 25 starts it unaided
-    // uint16_t period_value = 50;
+    //
+    motor_ctrl.mutex = xSemaphoreCreateMutex();
+    motor_ctrl.duty_value = 15;
+    motor_ctrl.period_value = 50;
+    motor_ctrl.breaks_enabled = false;
 
-    // Both of these values translate to SysCtlClockGet()/64)*(duty or period)/MICROSECONDS.
-    //configure buttons
+    if (motor_ctrl.mutex == NULL)
+    {
+        // Handle error
+        UARTprintf("Failed to create mutex\n");
+    }
+
+    // configure buttons
     prvConfigureButton();
-
-    /* Initialise the motors and set the duty cycle (speed) in microseconds */
-    initMotorLib(period_value);
-    /* Set at >10% to get it to start */
-    setDuty(duty_value);
+    if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
+    {
+        /* Initialise the motors and set the duty cycle (speed) in microseconds */
+        initMotorLib(motor_ctrl.period_value);
+        /* Set at >10% to get it to start */
+        setDuty(motor_ctrl.duty_value);
+        xSemaphoreGive(motor_ctrl.mutex);
+    }
     /* start motor phase cycle */
     enableMotor();
     /* Kick start the motor */
@@ -184,17 +209,28 @@ static void prvMotorTask(void *pvParameters)
 
     for (;;)
     {
-
-        if ((duty_value >= period_value / 2) | Breaking)
+        if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
         {
-            stopMotor(1);
-            duty_value = 0;
-            continue;
+            // if ((motor_ctrl.duty_value >= motor_ctrl.period_value - 2) || motor_ctrl.breaks_enabled)
+            // {
+            //     stopMotor(1);
+            //     motor_ctrl.duty_value = 0;
+            //     continue;
+            // }
+            if((0 >= motor_ctrl.duty_value) || (motor_ctrl.duty_value <= motor_ctrl.period_value)){
+                setDuty(motor_ctrl.duty_value);
+            }else{
+                //additional saftey feature, shouldn't happen, but incase it does
+                stopMotor(1);
+                disableMotor();
+                UARTprintf("INVALID DUTY_CYCLE\n");
+                break;
+            }
+            
+            // vTaskDelay(pdMS_TO_TICKS(250));
+            // motor_ctrl.duty_value++;
+            xSemaphoreGive(motor_ctrl.mutex);
         }
-
-        setDuty(duty_value);
-        vTaskDelay(pdMS_TO_TICKS(250));
-        duty_value++;
     }
 }
 /*-----------------------------------------------------------*/
@@ -217,7 +253,55 @@ static void prvConfigureButton(void)
     IntMasterEnable();
 }
 
+static void prvButtonTask(void *pvParameters)
+{
+    for (;;)
+    {
+        // only runs if the timer indicates and update has occured
+        if (xSemaphoreTake(xButtonSemaphore, portMAX_DELAY) == pdPASS)
+        {
 
+            if ((ui32ButtonStatus & USR_SW1) == USR_SW1)
+            {
+                //Have as little processing as possible within the locked mutex to prevent unnecesary slow down
+                if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
+                {
+                    if ((motor_ctrl.duty_value - BUTTON_DUTY_INCREMENT)<=0)
+                    {
+                        // Safety feature
+                        motor_ctrl.duty_value = 1;
+                    }
+                    else
+                    {
+                        motor_ctrl.duty_value -= BUTTON_DUTY_INCREMENT;
+                    }
+                    UARTprintf("Duty value %d\n",motor_ctrl.duty_value);
+                    xSemaphoreGive(motor_ctrl.mutex);
+                }
+                g_pui32ButtonPressed = USR_SW1;
+            }
+            else if ((ui32ButtonStatus & USR_SW2) == USR_SW2)
+            {
+                if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
+                {
+                    //prevents the duty cycle from going out of range
+                    if ((motor_ctrl.duty_value + BUTTON_DUTY_INCREMENT) >= motor_ctrl.period_value-1)
+                    {
+                        // Safety feature
+                        motor_ctrl.duty_value = 49;
+                    }
+                    else
+                    {
+                        motor_ctrl.duty_value += BUTTON_DUTY_INCREMENT;
+                    }
+                    UARTprintf("Duty value %d\n",motor_ctrl.duty_value);
+                    xSemaphoreGive(motor_ctrl.mutex);
+                }
+                g_pui32ButtonPressed = USR_SW2;
+            }
+        }
+    }
+}
 /*-----------------------------------------------------------*/
 /* Interrupt handlers */
 
@@ -244,7 +328,6 @@ void HallSensorHandler(void)
 void xButtonsHandler(void)
 {
     BaseType_t xButtonTaskWoken;
-    uint32_t ui32Status;
 
     /* Initialize the xLEDTaskWoken as pdFALSE.  This is required as the
      * FreeRTOS interrupt safe API will change it if needed should a
@@ -252,31 +335,19 @@ void xButtonsHandler(void)
     xButtonTaskWoken = pdFALSE;
 
     /* Read the buttons interrupt status to find the cause of the interrupt. */
-    ui32Status = GPIOIntStatus(BUTTONS_GPIO_BASE, true);
+    ui32ButtonStatus = GPIOIntStatus(BUTTONS_GPIO_BASE, true);
 
     /* Clear the interrupt. */
-    GPIOIntClear(BUTTONS_GPIO_BASE, ui32Status);
+    GPIOIntClear(BUTTONS_GPIO_BASE, ui32ButtonStatus);
 
     /* Debounce the input with 100ms filter */
     // Can reduce this value to increase response time of button
     // but if too small can lead to debouncing issues
     if ((xTaskGetTickCount() - g_ui32TimeStamp) > 100)
     {
-        /* Log which button was pressed to trigger the ISR. */
-
-        if ((ui32Status & USR_SW1) == USR_SW1)
-        {
-            stopMotor(1);
-            Breaking = true;
-            // duty_value = 0;
-            g_pui32ButtonPressed = USR_SW1;
-        }
-        else if ((ui32Status & USR_SW2) == USR_SW2)
-        {
-            g_pui32ButtonPressed = USR_SW2;
-        }
         /* This FreeRTOS API call will handle the context switch if it is
          * required or have no effect if that is not needed. */
+        xSemaphoreGiveFromISR(xButtonSemaphore, &xButtonTaskWoken);
         portYIELD_FROM_ISR(xButtonTaskWoken);
     }
 

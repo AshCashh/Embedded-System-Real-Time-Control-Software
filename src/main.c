@@ -52,6 +52,7 @@
 /* Kernel includes. */
 #include "FreeRTOS.h"
 #include "task.h"
+#include "semphr.h"
 
 /* Hardware includes. */
 #include "driverlib/pin_map.h"
@@ -91,9 +92,14 @@ extern void vCreateMotorTask( void );
 static void prvConfigureHallInts( void );
 
 /*-----------------------------------------------------------*/
+/*
+    Initialises sempahores
+*/
+SemaphoreHandle_t xButtonSemaphore = NULL;
 
 int main( void )
-{
+{   
+    xButtonSemaphore = xSemaphoreCreateBinary();
     /* Prepare the hardware to run this demo. */
     prvSetupHardware();
 

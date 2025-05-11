@@ -57,7 +57,6 @@ extern "C" {
 
 
 
-
 /* 
     Commutation phases for 3 phase BLDC with INHC = 1
     Phase F loops back to phase A per revolution 

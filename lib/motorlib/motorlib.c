@@ -111,11 +111,11 @@ void stopMotor(bool brakeType)
 
 void disableMotor()
 {
-    UARTprintf("enableMotor\n");
+    UARTprintf("disabledMotor\n");
     GPIOPinWrite(ENA, 0);
 }
 void enableMotor()
 {
-    UARTprintf("disableMotor\n");
+    UARTprintf("enabledMotor\n");
     GPIOPinWrite(ENA, GPIO_PIN_6);
 }
