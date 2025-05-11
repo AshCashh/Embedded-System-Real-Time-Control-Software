@@ -5,17 +5,19 @@
 #include "driverlib/pin_map.h"
 #include "inc/hw_memmap.h"
 
+
+
 bool initMotorLib(uint16_t pwm_period)
 {
     UARTprintf("initMotorLib: %d\n", pwm_period);
 
     SysCtlPeripheralEnable(SYSCTL_PERIPH_PWM0);
-    SysCtlPWMClockSet(SYSCTL_PWMDIV_64);
+    SysCtlPWMClockSet(SYSCTL_PWMDIV_1);
     PWMGenConfigure(PWM0_BASE, PWM_GEN_0,
                     PWM_GEN_MODE_DOWN | PWM_GEN_MODE_NO_SYNC |
                     PWM_GEN_MODE_DBG_STOP);
     PWMGenPeriodSet(PWM0_BASE, PWM_GEN_0,
-                    (SysCtlClockGet()/64)*pwm_period/1000000);
+                    (SysCtlClockGet())*pwm_period/MICROSECONDS);
     PWMGenEnable(PWM0_BASE, PWM_GEN_0);
     PWMOutputState(PWM0_BASE, PWM_OUT_1_BIT, true);
     GPIOPinConfigure(GPIO_PF1_M0PWM1);
@@ -42,7 +44,7 @@ void setDuty(uint16_t duty)
 {
     // UARTprintf("setDuty: %d\n", duty);
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1,
-        (SysCtlClockGet()/64)*duty/1000000);
+        (SysCtlClockGet())*duty/MICROSECONDS);
 }
 
 void updateMotor(bool Hall_a, bool Hall_b, bool Hall_c)

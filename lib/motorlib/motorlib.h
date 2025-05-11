@@ -47,6 +47,11 @@ extern "C" {
 #define PHASE_5         0b101                   /* C->A */
 #define PHASE_6         0b100                   /* B->A */
 
+/*
+    Mathematical constants used to convert between seconds and microseconds for example
+    t (microseconds) = t(seconds) / MICROSECONDS
+*/
+#define MICROSECONDS 1000000
 
 
 

@@ -2,37 +2,37 @@
  * hello_task
  *
  * Copyright (C) 2022 Texas Instruments Incorporated
- * 
- * 
- *  Redistribution and use in source and binary forms, with or without 
- *  modification, are permitted provided that the following conditions 
+ *
+ *
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions
  *  are met:
  *
- *    Redistributions of source code must retain the above copyright 
+ *    Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
  *
  *    Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the 
- *    documentation and/or other materials provided with the   
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the
  *    distribution.
  *
  *    Neither the name of Texas Instruments Incorporated nor the names of
  *    its contributors may be used to endorse or promote products derived
  *    from this software without specific prior written permission.
  *
- *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
- *  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ *  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
  *  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- *  A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
- *  OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- *  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
+ *  A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ *  OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ *  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
  *  LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
  *  DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- *  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
- *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+ *  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  *  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
-*/
+ */
 
 /******************************************************************************
  *
@@ -64,6 +64,8 @@
 #include "inc/hw_gpio.h"
 #include "inc/hw_types.h"
 #include "driverlib/sysctl.h"
+#include "driverlib/timer.h"
+#include "driverlib/interrupt.h"
 #include "drivers/rtos_hw_drivers.h"
 #include "utils/uartstdio.h"
 #include "driverlib/gpio.h"
@@ -71,6 +73,22 @@
 
 #include "motorlib.h"
 
+/*
+ * Time stamp global variable.
+ */
+volatile uint32_t g_ui32TimeStamp = 0;
+
+volatile uint16_t duty_value = 15; // 25 starts it unaided
+volatile uint16_t period_value = 50;
+
+volatile bool Breaking = false;
+
+extern volatile uint32_t g_ui32SysClock;
+
+/*
+ * Global variable to log the last GPIO button pressed.
+ */
+volatile static uint32_t g_pui32ButtonPressed = NULL;
 
 /* variable storing hall sensor values */
 int32_t hall_sensor_values[3] = {0, 0, 0};
@@ -81,12 +99,16 @@ void HallSensorHandler(void);
 /*
  * The tasks as described in the comments at the top of this file.
  */
-static void prvMotorTask( void *pvParameters );
+static void prvMotorTask(void *pvParameters);
 
 /*
  * Called by main() to create the Hello print task.
  */
-void vCreateMotorTask( void );
+void vCreateMotorTask(void);
+
+static void prvConfigureButton(void);
+
+// void prvConfigureButton(void);
 
 /*
  * Hardware interrupt handlers
@@ -94,8 +116,9 @@ void vCreateMotorTask( void );
 
 /*-----------------------------------------------------------*/
 
-void vCreateMotorTask( void )
+void vCreateMotorTask(void)
 {
+
     /* Create the task as described in the comments at the top of this file.
      *
      * The xTaskCreate parameters in order are:
@@ -106,22 +129,27 @@ void vCreateMotorTask( void )
      *  - No parameter passed to the task
      *  - The priority assigned to the task.
      *  - The task handle is NULL */
-    xTaskCreate( prvMotorTask,
-                 "Hello",
-                 configMINIMAL_STACK_SIZE,
-                 NULL,
-                 tskIDLE_PRIORITY + 1,
-                 NULL );
+    
+    xTaskCreate(prvMotorTask,
+                "Hello",
+                configMINIMAL_STACK_SIZE,
+                NULL,
+                tskIDLE_PRIORITY + 1,
+                NULL);
 }
 /*-----------------------------------------------------------*/
 
-static void prvMotorTask( void *pvParameters )
+static void prvMotorTask(void *pvParameters)
 {
-    /* 
+    /*
         TODO: investigate relationship with duty value and rpm
     */
-    uint16_t duty_value = 20; //25 starts it unaided
-    uint16_t period_value = 50;
+    // uint16_t duty_value = 15; // 25 starts it unaided
+    // uint16_t period_value = 50;
+
+    // Both of these values translate to SysCtlClockGet()/64)*(duty or period)/MICROSECONDS.
+    //configure buttons
+    prvConfigureButton();
 
     /* Initialise the motors and set the duty cycle (speed) in microseconds */
     initMotorLib(period_value);
@@ -133,48 +161,70 @@ static void prvMotorTask( void *pvParameters )
     // Do an initial read of the hall effect sensor GPIO lines
     /* read hall sensor gpio lines */
     UARTprintf("Getting hall values\n");
-    if (getHallSensorValues(hall_sensor_values)) {
+    if (getHallSensorValues(hall_sensor_values))
+    {
         UARTprintf("Hall sensor values: %d %d %d\n", hall_sensor_values[0], hall_sensor_values[1], hall_sensor_values[2]);
-    } else {
+    }
+    else
+    {
         UARTprintf("Error reading hall sensor values\n");
     }
     updateMotor(hall_sensor_values[0],
-        hall_sensor_values[1],
-        hall_sensor_values[2]);
+                hall_sensor_values[1],
+                hall_sensor_values[2]);
 
     // give the read hall effect sensor lines to updateMotor() to move the motor
     // one single phase
-    // Recommendation is to use an interrupt on the hall effect sensors GPIO lines 
+    // Recommendation is to use an interrupt on the hall effect sensors GPIO lines
     // So that the motor continues to be updated every time the GPIO lines change from high to low
     // or low to high
     // Include the updateMotor function call in the ISR to achieve this behaviour.
 
     /* Motor test - ramp up the duty cycle from 10% to 100%, than stop the motor */
-    
+
     for (;;)
     {
 
-        if(duty_value>=period_value / 2){
+        if ((duty_value >= period_value / 2) | Breaking)
+        {
             stopMotor(1);
             duty_value = 0;
             continue;
         }
 
         setDuty(duty_value);
-        vTaskDelay(pdMS_TO_TICKS( 250 ));
-        // duty_value++;
-
+        vTaskDelay(pdMS_TO_TICKS(250));
+        duty_value++;
     }
 }
 /*-----------------------------------------------------------*/
+static void prvConfigureButton(void)
+{
+    IntMasterDisable();
+    /* Initialize the LaunchPad Buttons. */
+    ButtonsInit();
+
+    /* Configure both switches to trigger an interrupt on a falling edge. */
+    GPIOIntTypeSet(BUTTONS_GPIO_BASE, ALL_BUTTONS, GPIO_FALLING_EDGE);
+
+    /* Enable the interrupt for LaunchPad GPIO Port in the GPIO peripheral. */
+    GPIOIntEnable(BUTTONS_GPIO_BASE, ALL_BUTTONS);
+
+    /* Enable the Port F interrupt in the NVIC. */
+    IntEnable(INT_GPIOJ);
+
+    /* Enable global interrupts in the NVIC. */
+    IntMasterEnable();
+}
 
 
+/*-----------------------------------------------------------*/
 /* Interrupt handlers */
 
 void HallSensorHandler(void)
 {
     /* Get type of interrupt */
-    /*Using tmp value for now, 
+    /*Using tmp value for now,
     TODO: switch to shared variable approach */
     int hall_tmp[3] = {0, 0, 0};
     uint32_t ui32StatusM = GPIOIntStatus(GPIO_PORTM_BASE, true);
@@ -189,4 +239,47 @@ void HallSensorHandler(void)
     GPIOIntClear(GPIO_PORTM_BASE, ui32StatusM);
     GPIOIntClear(GPIO_PORTH_BASE, ui32StatusH);
     GPIOIntClear(GPIO_PORTN_BASE, ui32StatusN);
+}
+
+void xButtonsHandler(void)
+{
+    BaseType_t xButtonTaskWoken;
+    uint32_t ui32Status;
+
+    /* Initialize the xLEDTaskWoken as pdFALSE.  This is required as the
+     * FreeRTOS interrupt safe API will change it if needed should a
+     * context switch be required. */
+    xButtonTaskWoken = pdFALSE;
+
+    /* Read the buttons interrupt status to find the cause of the interrupt. */
+    ui32Status = GPIOIntStatus(BUTTONS_GPIO_BASE, true);
+
+    /* Clear the interrupt. */
+    GPIOIntClear(BUTTONS_GPIO_BASE, ui32Status);
+
+    /* Debounce the input with 100ms filter */
+    // Can reduce this value to increase response time of button
+    // but if too small can lead to debouncing issues
+    if ((xTaskGetTickCount() - g_ui32TimeStamp) > 100)
+    {
+        /* Log which button was pressed to trigger the ISR. */
+
+        if ((ui32Status & USR_SW1) == USR_SW1)
+        {
+            stopMotor(1);
+            Breaking = true;
+            // duty_value = 0;
+            g_pui32ButtonPressed = USR_SW1;
+        }
+        else if ((ui32Status & USR_SW2) == USR_SW2)
+        {
+            g_pui32ButtonPressed = USR_SW2;
+        }
+        /* This FreeRTOS API call will handle the context switch if it is
+         * required or have no effect if that is not needed. */
+        portYIELD_FROM_ISR(xButtonTaskWoken);
+    }
+
+    /* Update the time stamp. */
+    g_ui32TimeStamp = xTaskGetTickCount();
 }
