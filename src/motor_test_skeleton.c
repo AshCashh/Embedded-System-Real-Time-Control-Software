@@ -112,6 +112,7 @@ void HallSensorHandler(void);
  */
 static void prvMotorTask(void *pvParameters);
 static void prvButtonTask(void *pvParameters);
+static void prvMotorCalcTask(void *pvParameters);
 
 /*
  * Called by main() to create the Hello print task.
@@ -152,6 +153,12 @@ void vCreateMotorTask(void)
                 configMINIMAL_STACK_SIZE,
                 NULL,
                 tskIDLE_PRIORITY + 2,
+                NULL);
+    xTaskCreate(prvMotorCalcTask,
+                "MotorCalc",
+                configMINIMAL_STACK_SIZE,
+                NULL,
+                tskIDLE_PRIORITY + 3,
                 NULL);
 }
 /*-----------------------------------------------------------*/
@@ -301,6 +308,12 @@ static void prvButtonTask(void *pvParameters)
             }
         }
     }
+}
+
+static void prvMotorCalcTask(void *pvpvParameters)
+{
+
+    for(;;);
 }
 /*-----------------------------------------------------------*/
 /* Interrupt handlers */
