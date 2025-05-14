@@ -70,9 +70,11 @@
 #include "utils/uartstdio.h"
 #include "driverlib/gpio.h"
 #include "driverlib/pwm.h"
-
+#include "variables.h"
 // Motor lib
 #include <motorlib.h>
+
+motorcontrol_t motor_ctrl;
 
 /*-----------------------------------------------------------*/
 extern void HallSensorHandler(void);
@@ -96,10 +98,16 @@ static void prvConfigureHallInts( void );
     Initialises sempahores
 */
 SemaphoreHandle_t xButtonSemaphore = NULL;
+SemaphoreHandle_t xHallSemaphore = NULL;
 
 int main( void )
 {   
     xButtonSemaphore = xSemaphoreCreateBinary();
+    xHallSemaphore = xSemaphoreCreateBinary();
+    motor_ctrl.mutex = xSemaphoreCreateMutex();
+    motor_ctrl.duty_value = 15;
+    motor_ctrl.period_value = 50;
+    motor_ctrl.brake = false;
     /* Prepare the hardware to run this demo. */
     prvSetupHardware();
 

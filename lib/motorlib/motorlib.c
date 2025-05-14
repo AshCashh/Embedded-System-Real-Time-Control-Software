@@ -4,7 +4,7 @@
 #include "driverlib/gpio.h"
 #include "driverlib/pin_map.h"
 #include "inc/hw_memmap.h"
-
+#include "variables.h"
 
 
 bool initMotorLib(uint16_t pwm_period)
@@ -17,7 +17,7 @@ bool initMotorLib(uint16_t pwm_period)
                     PWM_GEN_MODE_DOWN | PWM_GEN_MODE_NO_SYNC |
                     PWM_GEN_MODE_DBG_STOP);
     PWMGenPeriodSet(PWM0_BASE, PWM_GEN_0,
-                    (SysCtlClockGet())*pwm_period/MICROSECONDS);
+        MICROSECONDS(pwm_period));
     PWMGenEnable(PWM0_BASE, PWM_GEN_0);
     PWMOutputState(PWM0_BASE, PWM_OUT_1_BIT, true);
     GPIOPinConfigure(GPIO_PF1_M0PWM1);
@@ -44,7 +44,7 @@ void setDuty(uint16_t duty)
 {
     // UARTprintf("setDuty: %d\n", duty);
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1,
-        (SysCtlClockGet())*duty/MICROSECONDS);
+        MICROSECONDS(duty));
 }
 
 void updateMotor(bool Hall_a, bool Hall_b, bool Hall_c)
