@@ -292,7 +292,7 @@ static void prvConfigureHWTimer(void)
     TimerConfigure(TIMER0_BASE, TIMER_CFG_PERIODIC);
 
     /* Set the Timer 0A load value to run at 5 Hz. */
-    TimerLoadSet(TIMER0_BASE, TIMER_A, g_ui32SysClock / 1); // 100 ms
+    TimerLoadSet(TIMER0_BASE, TIMER_A, g_ui32SysClock / 10); // 100 ms
 
     /* Configure the Timer 0A interrupt for timeout. */
     TimerIntEnable(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
