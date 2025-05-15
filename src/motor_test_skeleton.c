@@ -344,7 +344,7 @@ static void prvMotorCalcTask(void *pvParameters)
             if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
             {
                 taskENTER_CRITICAL();
-                motor_ctrl.rpm = (count/12) * 300;
+                motor_ctrl.rpm = (count/24) * 60;
 
                 count = 0;
                 taskEXIT_CRITICAL();
@@ -369,9 +369,16 @@ void HallSensorHandler(void)
     GPIOIntClear(GPIO_PORTH_BASE, ui32StatusH);
     GPIOIntClear(GPIO_PORTN_BASE, ui32StatusN);
     // if ((ui32StatusM && GPIO_PIN_3) == 1) {
-        // signal semaphore
-            count++;
+    //     // signal semaphore
+    //     // UARTprintf("SPIN\n");
+    //         count++;
     // }
+    // UARTprintf("%d%d%d\n", 
+    //     (ui32StatusM && GPIO_PIN_3) == 1,
+    //     (ui32StatusH && GPIO_PIN_2) == 1,
+    //     (ui32StatusN && GPIO_PIN_2) == 1
+    // );
+    count++;
     int tmp[3] = {0, 0, 0};
     getHallSensorValues(tmp);
     updateMotor(tmp[0], tmp[1], tmp[2]);
