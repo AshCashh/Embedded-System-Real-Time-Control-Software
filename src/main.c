@@ -74,6 +74,8 @@
 // Motor lib
 #include <motorlib.h>
 
+#include "driverlib/timer.h"
+
 motorcontrol_t motor_ctrl;
 
 /*-----------------------------------------------------------*/
@@ -93,6 +95,7 @@ extern void vCreateMotorTask( void );
 
 static void prvConfigureHallInts( void );
 
+static void prvConfigureHWTimer(void);
 /*-----------------------------------------------------------*/
 /*
     Initialises sempahores
@@ -113,6 +116,7 @@ int main( void )
 
     /* Create the Hello task to output a message over UART. */
     vCreateMotorTask();
+    prvConfigureHWTimer();
 
     /* Start the tasks and timer running. */
     vTaskStartScheduler();
@@ -279,7 +283,32 @@ static void prvConfigureHallInts( void )
 }
 
 /*-----------------------------------------------------------*/
+static void prvConfigureHWTimer(void)
+{
+    /* The Timer 0 peripheral must be enabled for use. */
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER0);
 
+    /* Configure Timer 0 in full-width periodic mode. */
+    TimerConfigure(TIMER0_BASE, TIMER_CFG_PERIODIC);
+
+    /* Set the Timer 0A load value to run at 5 Hz. */
+    TimerLoadSet(TIMER0_BASE, TIMER_A, g_ui32SysClock / 1); // 100 ms
+
+    /* Configure the Timer 0A interrupt for timeout. */
+    TimerIntEnable(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
+
+    /* Enable the Timer 0A interrupt in the NVIC. */
+    IntEnable(INT_TIMER0A);
+
+    /* Enable global interrupts in the NVIC. */
+    IntMasterEnable();
+
+    //
+    // Start the timer used in this example Task
+    // You may need change where this timer is enabled
+    //
+    TimerEnable(TIMER0_BASE, TIMER_A);
+}
 void vApplicationIdleHook( void )
 {
     /* vApplicationIdleHook() will only be called if configUSE_IDLE_HOOK is set
