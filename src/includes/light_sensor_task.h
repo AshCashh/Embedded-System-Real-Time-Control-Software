@@ -29,6 +29,8 @@ typedef struct AMessage
 
 // Function declarations
 void vCreateLightSensorTask(void);
+static void prvAccelTask(void *pvParameters);
+
 
 
 #endif

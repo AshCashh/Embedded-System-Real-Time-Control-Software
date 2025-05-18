@@ -113,6 +113,7 @@
 #include "includes/filter_util.h"
 #include "includes/display_task.h"
 #include "includes/button_task.h"
+#include "driver_lib/bmi160.h"
 
 /*-----------------------------------------------------------*/
 /*
@@ -136,11 +137,8 @@ static float filterSumY = 0;
 static float filterSumZ = 0;
 // not sure about this
 struct bmi160_t s_bmi160;
-struct bmi160_accel_t {
-    int16_t x;
-    int16_t y;
-    int16_t z;
-} accelData;
+struct bmi160_accel_t accelData;
+
 
 // Structure for acceleration data
 typedef struct {
@@ -190,6 +188,7 @@ void vCreateAccelTask(void)
 
 static void prvAccelTask(void *pvParameters)
 {
+
     //printf("Accel Task Started\n");
     UARTprintf("sensor initialized!\n");
     // Initialize the BMI160 sensor

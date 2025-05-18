@@ -105,6 +105,7 @@ SemaphoreHandle_t xButton1Semaphore = NULL;
 SemaphoreHandle_t xButton2Semaphore = NULL;
 SemaphoreHandle_t xIC2MasterSemaphore = NULL;
 SemaphoreHandle_t xSampleLightSemaphore = NULL;
+SemaphoreHandle_t xSampleAccelSemaphore = NULL;
 
 /* Set up the clock and pin configurations to run this example. */
 static void prvSetupHardware( void );
@@ -163,14 +164,16 @@ int main( void )
     xButton2Semaphore = xSemaphoreCreateBinary();
     xIC2MasterSemaphore = xSemaphoreCreateBinary();
     xSampleLightSemaphore = xSemaphoreCreateBinary();
-
+    xSampleAccelSemaphore = xSemaphoreCreateBinary();
 
 
 
     if ( xButton1Semaphore != NULL && xButton2Semaphore != NULL && xIC2MasterSemaphore != NULL && xSampleLightSemaphore != NULL)
     {
         /* Configure application specific hardware and initialize the task thread. */
-        vCreateLightSensorTask();
+        //vCreateLightSensorTask();
+        vCreateAccelTask();
+
         vCreateDisplayTask();
 
         /* Start the tasks. */
