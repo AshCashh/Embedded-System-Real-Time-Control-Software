@@ -174,6 +174,8 @@ static void prvMotorTask(void *pvParameters)
         initMotorLib(motor_ctrl.period_value);
         /* Set at >10% to get it to start */
         setDuty(motor_ctrl.duty_value);
+        motor_ctrl.motor_enabled = true;
+        motor_ctrl.stall_counter = 0;
         xSemaphoreGive(motor_ctrl.mutex);
     }
     else
@@ -209,7 +211,9 @@ static void prvMotorTask(void *pvParameters)
     // Include the updateMotor function call in the ISR to achieve this behaviour.
 
     /* Motor test - ramp up the duty cycle from 10% to 100%, than stop the motor */
-    uint32_t rpm=0, duty_value=25, period_value=50;
+    uint32_t rpm = 0, duty_value = 25, period_value = 50;
+    uint8_t stall_counter = 0;
+    bool motor_enabled = false;
     for (;;)
     {
         if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
@@ -217,31 +221,40 @@ static void prvMotorTask(void *pvParameters)
             duty_value = motor_ctrl.duty_value;
             period_value = motor_ctrl.period_value;
             rpm = motor_ctrl.rpm;
+            motor_enabled = motor_ctrl.motor_enabled;
+            stall_counter = motor_ctrl.stall_counter;
             xSemaphoreGive(motor_ctrl.mutex);
         }
-        // if ((motor_ctrl.duty_value >= motor_ctrl.period_value - 2) || motor_ctrl.brake)
-        // {
-        //     stopMotor(1);
-        //     motor_ctrl.duty_value = 0;
-        //     continue;
-        // }
-        if ((0 >= duty_value) || (duty_value <= period_value))
+
+        if (motor_enabled)
         {
-            setDuty(duty_value);
+
+            if ((0 >= duty_value) || (duty_value <= period_value))
+            {
+                setDuty(duty_value);
+            }
+            else
+            {
+                // additional saftey feature, shouldn't happen, but incase it does
+                // stopMotor(1);
+                disableMotor();
+                UARTprintf("INVALID DUTY_CYCLE\n");
+                break;
+            }
+            UARTprintf("\rDuty cycle: %d RPM: %d", duty_value,rpm);
         }
         else
         {
-            // additional saftey feature, shouldn't happen, but incase it does
-            stopMotor(1);
-            disableMotor();
-            UARTprintf("INVALID DUTY_CYCLE\n");
-            break;
+            if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
+            {
+                if (motor_ctrl.stall_counter > STALL_VAL)
+                {
+                    UARTprintf("\rMotor disabled                          ");
+                    disableMotor();
+                }
+                xSemaphoreGive(motor_ctrl.mutex);
+            }
         }
-
-        UARTprintf("RPM: %d\n", rpm);
-
-        // vTaskDelay(pdMS_TO_TICKS(250));
-        // motor_ctrl.duty_value++;
     }
 }
 /*-----------------------------------------------------------*/
@@ -270,22 +283,27 @@ static void prvButtonTask(void *pvParameters)
         // only runs if the timer indicates and update has occured
         if (xSemaphoreTake(xButtonSemaphore, portMAX_DELAY) == pdPASS)
         {
-            UARTprintf("Button task started\n");
+            // UARTprintf("Button task started\n");
             if ((ui32ButtonStatus & USR_SW1) == USR_SW1)
             {
                 // Have as little processing as possible within the locked mutex to prevent unnecesary slow down
                 if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
                 {
-                    if ((motor_ctrl.duty_value - BUTTON_DUTY_INCREMENT) <= 0)
+                    if ((motor_ctrl.duty_value - BUTTON_DUTY_INCREMENT) <= 1)
                     {
                         // Safety feature
+                        UARTprintf("\nDuty value too low, setting to 1\n");
+                        // UARTprintf("\nMotor disabled\n");
+                        motor_ctrl.motor_enabled = false;
                         motor_ctrl.duty_value = 1;
+                        motor_ctrl.stall_counter = STALL_VAL+1;
+                        disableMotor();
                     }
                     else
                     {
                         motor_ctrl.duty_value -= BUTTON_DUTY_INCREMENT;
                     }
-                    UARTprintf("Duty value %d\n", motor_ctrl.duty_value);
+                    // UARTprintf("Duty value %d\n", motor_ctrl.duty_value);
                     xSemaphoreGive(motor_ctrl.mutex);
                 }
                 g_pui32ButtonPressed = USR_SW1;
@@ -294,17 +312,33 @@ static void prvButtonTask(void *pvParameters)
             {
                 if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
                 {
+                    if (motor_ctrl.motor_enabled == false)
+                    {
+                        taskENTER_CRITICAL();
+                        UARTprintf("\nMotor Re-enabled after stall\n");
+                        motor_ctrl.motor_enabled = true;
+                        motor_ctrl.stall_counter = 0;
+                        motor_ctrl.duty_value = 15;
+                        getHallSensorValues(motor_ctrl.hall_sensor_values);
+                        updateMotor(motor_ctrl.hall_sensor_values[0],
+                                    motor_ctrl.hall_sensor_values[1],
+                                    motor_ctrl.hall_sensor_values[2]);
+                        setDuty(motor_ctrl.duty_value);
+                        enableMotor();
+                        taskEXIT_CRITICAL();
+                    }
                     // prevents the duty cycle from going out of range
-                    if ((motor_ctrl.duty_value + BUTTON_DUTY_INCREMENT) >= motor_ctrl.period_value - 1)
+                    else if ((motor_ctrl.duty_value + BUTTON_DUTY_INCREMENT) >= motor_ctrl.period_value - 1)
                     {
                         // Safety feature
+                        UARTprintf("\nDUTY VALUE MAXED OUT\n");
                         motor_ctrl.duty_value = 49;
                     }
                     else
                     {
                         motor_ctrl.duty_value += BUTTON_DUTY_INCREMENT;
                     }
-                    UARTprintf("Duty value %d\n", motor_ctrl.duty_value);
+                    // UARTprintf("Duty value %d\n", motor_ctrl.duty_value);
                     xSemaphoreGive(motor_ctrl.mutex);
                 }
                 g_pui32ButtonPressed = USR_SW2;
@@ -312,25 +346,6 @@ static void prvButtonTask(void *pvParameters)
         }
     }
 }
-
-// static void prvMotorCalcTask(void *pvpvParameters)
-// {
-//     uint32_t last_update = xTaskGetTickCount();
-
-//     for (;;)
-//     {
-//         if (xSemaphoreTake(xHallSemaphore, portMAX_DELAY) == pdTRUE)
-//         {
-//             // UARTprintf("Motor calc task started\n");
-//             uint32_t time_delta_ms = (xTaskGetTickCount() - last_update);
-//             if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE) {
-//                 motor_ctrl.rpm = MICROSECONDS_TO_RPM(time_delta_ms);
-//                 xSemaphoreGive(motor_ctrl.mutex);
-//             }
-//             last_update = xTaskGetTickCount();
-//         }
-//     }
-// }
 
 static void prvMotorCalcTask(void *pvParameters)
 {
@@ -344,7 +359,24 @@ static void prvMotorCalcTask(void *pvParameters)
             if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
             {
                 taskENTER_CRITICAL();
-                motor_ctrl.rpm = (count/24) * 60;
+                motor_ctrl.rpm = COUNT_TO_RPM(count);
+                if ((motor_ctrl.stall_counter < STALL_VAL) && (motor_ctrl.rpm == 0))
+                {
+                    // UARTprintf("Motor Stalling\n");
+                    motor_ctrl.stall_counter++;
+                }
+                else if (motor_ctrl.rpm > 0)
+                {
+                    motor_ctrl.stall_counter = 0;
+                }
+                else if (motor_ctrl.stall_counter >= STALL_VAL)
+                {
+
+                    // UARTprintf("Motor Stalled\n");
+                    motor_ctrl.motor_enabled = false;
+                    motor_ctrl.stall_counter = STALL_VAL+1;
+                    disableMotor();
+                }
 
                 count = 0;
                 taskEXIT_CRITICAL();
@@ -368,20 +400,13 @@ void HallSensorHandler(void)
     GPIOIntClear(GPIO_PORTM_BASE, ui32StatusM);
     GPIOIntClear(GPIO_PORTH_BASE, ui32StatusH);
     GPIOIntClear(GPIO_PORTN_BASE, ui32StatusN);
-    // if ((ui32StatusM && GPIO_PIN_3) == 1) {
-    //     // signal semaphore
-    //     // UARTprintf("SPIN\n");
-    //         count++;
-    // }
-    // UARTprintf("%d%d%d\n", 
-    //     (ui32StatusM && GPIO_PIN_3) == 1,
-    //     (ui32StatusH && GPIO_PIN_2) == 1,
-    //     (ui32StatusN && GPIO_PIN_2) == 1
-    // );
+
     count++;
     int tmp[3] = {0, 0, 0};
     getHallSensorValues(tmp);
     updateMotor(tmp[0], tmp[1], tmp[2]);
+
+    // UARTprintf("Hall sensor values: %d %d %d\n", tmp[0], tmp[1], tmp[2]);
 
     /* Read the hall sensor GPIO lines */
     // xSemaphoreGiveFromISR(xHallSemaphore, &xHallTaskWoken);
@@ -390,7 +415,6 @@ void HallSensorHandler(void)
 void xButtonsHandler(void)
 {
     BaseType_t xButtonTaskWoken;
-    UARTprintf("Button handler\n");
     /* Initialize the xLEDTaskWoken as pdFALSE.  This is required as the
      * FreeRTOS interrupt safe API will change it if needed should a
      * context switch be required. */
@@ -430,8 +454,4 @@ void xTimerHandler(void)
     /* Clear the hardware interrupt flag for Timer 0A. */
     xSemaphoreGiveFromISR(xHallSemaphore, &xHallTaskWoken);
     portYIELD_FROM_ISR(xHallTaskWoken);
-
-    /* Update only time based game variables here*/
-    // e.g. fruit location
-    // don't do full game logic here
 }

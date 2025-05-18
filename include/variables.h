@@ -44,7 +44,18 @@
 #define MICROSECONDS(duty) \
     (SysCtlClockGet()*duty/1000000)
 
-#define PWM_FREQUENCY 100000
+// #define PWM_FREQUENCY 100000
+
+#define STALL_VAL 1
+
+#define COUNT_REFRESH_RATE_HZ 1
+
+
+#define COUNT_PER_REVOLUTION 24
+#define SECONDS_PER_MINUTE 60
+
+#define COUNT_TO_RPM(count) \
+    ((count/COUNT_PER_REVOLUTION)*COUNT_REFRESH_RATE_HZ*SECONDS_PER_MINUTE) 
 
 
 
@@ -85,6 +96,8 @@ typedef struct
     volatile uint16_t duty_value; /* current duty cycle value */
     uint16_t period_value; /* current period value */
     uint32_t hall_currents[3]; /* hall sensor currents */
+    bool motor_enabled; /* stall prevention flag */
+    uint8_t stall_counter; /* reactivation count */
     bool brake; /* brake flag */
     uint32_t rpm; /* current rpm value */
     uint32_t hall_sensor_values[3]; /* hall sensor values */
