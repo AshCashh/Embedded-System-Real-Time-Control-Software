@@ -287,6 +287,13 @@ static void prvConfigureButton(void)
 }
 static void prvButtonTask(void *pvParameters)
 {
+    /*
+        * Button task
+        * This task is responsible for handling the button presses and updating
+        * the motor speed and direction accordingly. It uses a semaphore to
+        * synchronize with the button interrupt handler.
+        * This is primarily for testing purposes in the place of an Actual UI
+    */
     for (;;)
     {
         // only runs if the timer indicates and update has occured
@@ -363,10 +370,15 @@ static void prvButtonTask(void *pvParameters)
 }
 
 static void prvMotorCalcTask(void *pvParameters)
-{
-    // uint32_t last_update = xTaskGetTickCount();
-    // counter is rp/100ms -> rp/ms*10 = rps -> rps*60 = rpm
-    // counter*600/6 =
+{   
+    /* Motor calculation task 
+        * This task is responsible for calculating the motor speed and acceleration
+        * based on the hall sensor readings. It also handles stall detection and
+        * re-enables the motor if it has stalled.
+        *
+        * The task runs in an infinite loop, waiting for the xCountTimerSemaphore
+        * to be given by the timer interrupt handler.
+    */
     for (;;)
     {
         if (xSemaphoreTake(xCountTimerSemaphore, portMAX_DELAY) == pdTRUE)
@@ -408,6 +420,11 @@ static void prvMotorCalcTask(void *pvParameters)
 
 void HallSensorHandler(void)
 {
+    /*
+    * Hall sensor interrupt handler
+    * This function is called when the hall sensor interrupts are triggered.
+    * It clears the interrupt and updates the motor phase based on the hall
+    */
     /* Get type of interrupt */
     uint32_t ui32StatusM = GPIOIntStatus(GPIO_PORTM_BASE, true);
     uint32_t ui32StatusH = GPIOIntStatus(GPIO_PORTH_BASE, true);
@@ -418,7 +435,11 @@ void HallSensorHandler(void)
     GPIOIntClear(GPIO_PORTH_BASE, ui32StatusH);
     GPIOIntClear(GPIO_PORTN_BASE, ui32StatusN);
 
+    /* Increments the count used by PRVMotorCalc task, this does not need protection as in MotorCalc has a critcal section and motorcalc task cannot preempt interupts*/
     count++;
+
+    
+    /* Get the current hall sensor values, I am currently unsure if this should be global or if it doesn't matter and can remain like this */
     int tmp[3] = {0, 0, 0};
     getHallSensorValues(tmp);
     updateMotor(tmp[0], tmp[1], tmp[2]);
@@ -454,6 +475,10 @@ void xButtonsHandler(void)
 }
 void xTimerHandler(void)
 {
+    /*
+    Currently this timer is being used by the MotorCalc task to update the RPM and acceleration, as such it will vary while in development unless it is required to be something specific
+    
+    */
     /* Clear the hardware interrupt flag for Timer 0A. */
     TimerIntClear(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
 
