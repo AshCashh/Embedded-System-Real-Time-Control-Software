@@ -335,7 +335,7 @@ static void prvButtonTask(void *pvParameters)
                         UARTprintf("\nMotor Re-enabled after stall\n");
                         motor_ctrl.motor_enabled = true;
                         motor_ctrl.stall_counter = 0;
-                        motor_ctrl.pwm = 15;
+                        motor_ctrl.pwm = 30; //30%
                         getHallSensorValues(motor_ctrl.hall_sensor_values);
                         updateMotor(motor_ctrl.hall_sensor_values[0],
                                     motor_ctrl.hall_sensor_values[1],
