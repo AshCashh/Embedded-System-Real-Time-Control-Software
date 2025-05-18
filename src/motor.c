@@ -176,6 +176,7 @@ static void prvMotorTask(void *pvParameters)
         setDuty(motor_ctrl.duty_value);
         motor_ctrl.motor_enabled = true;
         motor_ctrl.stall_counter = 0;
+        motor_ctrl.acceleration = 0;
         xSemaphoreGive(motor_ctrl.mutex);
     }
     else
@@ -211,18 +212,18 @@ static void prvMotorTask(void *pvParameters)
     // Include the updateMotor function call in the ISR to achieve this behaviour.
 
     /* Motor test - ramp up the duty cycle from 10% to 100%, than stop the motor */
-    uint32_t rpm = 0, duty_value = 25, period_value = 50;
-    uint8_t stall_counter = 0;
+    uint32_t rpm = 0, acceleration = 0, duty_value = 25, period_value = 50;
     bool motor_enabled = false;
     for (;;)
     {
         if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
         {
+            // UARTprintf("Motor task mutex taken\n");
             duty_value = motor_ctrl.duty_value;
             period_value = motor_ctrl.period_value;
             rpm = motor_ctrl.rpm;
+            acceleration = motor_ctrl.acceleration;
             motor_enabled = motor_ctrl.motor_enabled;
-            stall_counter = motor_ctrl.stall_counter;
             xSemaphoreGive(motor_ctrl.mutex);
         }
 
@@ -241,7 +242,7 @@ static void prvMotorTask(void *pvParameters)
                 UARTprintf("INVALID DUTY_CYCLE\n");
                 break;
             }
-            UARTprintf("\rDuty cycle: %d RPM: %d", duty_value,rpm);
+            UARTprintf("\rDuty cycle: %d   RPM: %d  Acceleration(RPM/s): %d   ", duty_value,rpm,acceleration);
         }
         else
         {
@@ -249,7 +250,7 @@ static void prvMotorTask(void *pvParameters)
             {
                 if (motor_ctrl.stall_counter > STALL_VAL)
                 {
-                    UARTprintf("\rMotor disabled                          ");
+                    UARTprintf("\rMotor disabled");
                     disableMotor();
                 }
                 xSemaphoreGive(motor_ctrl.mutex);
@@ -359,7 +360,9 @@ static void prvMotorCalcTask(void *pvParameters)
             if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
             {
                 taskENTER_CRITICAL();
+                uint32_t old_rpm = motor_ctrl.rpm;
                 motor_ctrl.rpm = COUNT_TO_RPM(count);
+                motor_ctrl.acceleration = (motor_ctrl.rpm - old_rpm) * COUNT_REFRESH_RATE_HZ;
                 if ((motor_ctrl.stall_counter < STALL_VAL) && (motor_ctrl.rpm == 0))
                 {
                     // UARTprintf("Motor Stalling\n");

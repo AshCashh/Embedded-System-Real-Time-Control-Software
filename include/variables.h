@@ -45,11 +45,13 @@
     (SysCtlClockGet()*duty/1000000)
 
 // #define PWM_FREQUENCY 100000
+#define STALL_DURATION 1 //seconds
 
-#define STALL_VAL 1
 
-#define COUNT_REFRESH_RATE_HZ 1
 
+#define COUNT_REFRESH_RATE_HZ 2
+
+#define STALL_VAL STALL_DURATION*COUNT_REFRESH_RATE_HZ
 
 #define COUNT_PER_REVOLUTION 24
 #define SECONDS_PER_MINUTE 60
@@ -100,6 +102,7 @@ typedef struct
     uint8_t stall_counter; /* reactivation count */
     bool brake; /* brake flag */
     uint32_t rpm; /* current rpm value */
+    uint32_t acceleration; /* current acceleration value */
     uint32_t hall_sensor_values[3]; /* hall sensor values */
 } motorcontrol_t;
 
