@@ -101,15 +101,16 @@ static void prvConfigureHWTimer(void);
     Initialises sempahores
 */
 SemaphoreHandle_t xButtonSemaphore = NULL;
-SemaphoreHandle_t xHallSemaphore = NULL;
+SemaphoreHandle_t xCountTimerSemaphore = NULL;
 
 int main( void )
 {   
     xButtonSemaphore = xSemaphoreCreateBinary();
-    xHallSemaphore = xSemaphoreCreateBinary();
+    xCountTimerSemaphore = xSemaphoreCreateBinary();
     motor_ctrl.mutex = xSemaphoreCreateMutex();
-    motor_ctrl.duty_value = 15;
+    motor_ctrl.pwm = 25;
     motor_ctrl.period_value = 50;
+    motor_ctrl.duty_value = PWM_TO_DUTY(motor_ctrl.period_value, motor_ctrl.pwm);
     motor_ctrl.brake = false;
     /* Prepare the hardware to run this demo. */
     prvSetupHardware();

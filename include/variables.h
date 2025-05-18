@@ -44,6 +44,11 @@
 #define MICROSECONDS(duty) \
     (SysCtlClockGet()*duty/1000000)
 
+/* PWM to DUTY*/
+
+#define PWM_TO_DUTY(period_value, pwm) \
+    ((pwm*period_value)/100) /* return duty Value */
+
 // #define PWM_FREQUENCY 100000
 #define STALL_DURATION 1 //seconds
 
@@ -95,12 +100,13 @@
 typedef struct
 {
     SemaphoreHandle_t mutex; /* mutex for controlling access */
+    uint16_t pwm; /* PWM percentage 0-100 */
     volatile uint16_t duty_value; /* current duty cycle value */
     uint16_t period_value; /* current period value */
     uint32_t hall_currents[3]; /* hall sensor currents */
     bool motor_enabled; /* stall prevention flag */
-    uint8_t stall_counter; /* reactivation count */
     bool brake; /* brake flag */
+    uint8_t stall_counter; /* reactivation count */
     uint32_t rpm; /* current rpm value */
     uint32_t acceleration; /* current acceleration value */
     uint32_t hall_sensor_values[3]; /* hall sensor values */
