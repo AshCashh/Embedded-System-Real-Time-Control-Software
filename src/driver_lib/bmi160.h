@@ -292,6 +292,7 @@ define the data types manually
 #endif
 #endif
 #endif
+
 /***************************************************************/
 /**\name	BUS READ AND WRITE FUNCTION POINTERS        */
 /***************************************************************/
@@ -315,7 +316,7 @@ define the data types manually
 
 
 */
-#define BMI160_WR_FUNC_PTR s8 (*bus_write)(u8, u8 ,\
+#define BMI160_WR_FUNC_PTR s8 (*i2c_write)(u8, u8 ,\
 u8 *, u8)
 /**< link macro between API function calls and bus write function
 	@note The bus write function can change since this is a
@@ -338,7 +339,7 @@ u8 *, u8)
 
 */
 #define BMI160_BUS_WRITE_FUNC(dev_addr, reg_addr, reg_data, wr_len)\
-				bus_write(dev_addr, reg_addr, reg_data, wr_len)
+i2c_write(dev_addr, reg_addr, reg_data, wr_len)
 
 /**< Define the calling convention of YOUR bus communication routine.
 	@note This includes types of parameters. This example shows the

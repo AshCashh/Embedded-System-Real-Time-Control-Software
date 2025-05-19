@@ -189,15 +189,18 @@ void vCreateAccelTask(void)
 static void prvAccelTask(void *pvParameters)
 {
 
-    //printf("Accel Task Started\n");
-    UARTprintf("sensor initialized!\n");
+    UARTprintf("Accel Task Started\n");
     // Initialize the BMI160 sensor
-    bmi160_init(&s_bmi160);
+    if (bmi160_init(&s_bmi160) == -1) {
+        UARTprintf("[!] BMI160 Initilisation Failed\n");
+    }
+    UARTprintf("Initialisation Completed\n");
 
     AccelMessage accelMessage;
 
     while (1)
     {
+        UARTprintf("Pizza\n");
         if (xSemaphoreTake(xSampleAccelSemaphore, portMAX_DELAY) == pdTRUE)
         {
             // Read acceleration data
