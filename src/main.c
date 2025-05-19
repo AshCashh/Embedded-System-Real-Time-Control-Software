@@ -91,6 +91,7 @@
 #include "driverlib/i2c.h"
 #include "drivers/opt3001.h"
 
+#include "includes/accel_sensor_task.h"
 #include "includes/light_sensor_task.h"
 #include "includes/display_task.h"
 #include "includes/common.h"

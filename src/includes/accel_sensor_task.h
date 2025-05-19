@@ -29,7 +29,7 @@ typedef struct AMessage
 
 // Function declarations
 void vCreateLightSensorTask(void);
-static void prvLightSensorTask(void *pvParameters);
+static void prvAccelTask(void *pvParameters);
 
 
 #endif

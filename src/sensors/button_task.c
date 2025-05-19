@@ -53,7 +53,7 @@
 #include "drivers/Kentec320x240x16_ssd2119_spi.h"
 #include "drivers/touch.h"
 #include "includes/common.h"
-#include "includes/light_sensor_task.h"
+#include "includes/accel_sensor_task.h"
 #include "includes/filter_util.h"
 
 extern SemaphoreHandle_t xButton1Semaphore;

@@ -109,12 +109,10 @@
 #include "drivers/Kentec320x240x16_ssd2119_spi.h"
 #include "drivers/touch.h"
 #include "includes/common.h"
-#include "includes/accel_sensor_task.h"
 #include "includes/light_sensor_task.h"
 #include "includes/filter_util.h"
 #include "includes/display_task.h"
 #include "includes/button_task.h"
-#include "drivers/bmi160.h"
 
 /*-----------------------------------------------------------*/
 /*
@@ -122,38 +120,16 @@
  */
 
 extern SemaphoreHandle_t xIC2MasterSemaphore;
-extern SemaphoreHandle_t xSampleAccelSemaphore;
+extern SemaphoreHandle_t xSampleLightSemaphore;
 
 extern uint32_t g_ui32SysClock;
 
 tContext sContext;
-// Moving average filter variables
-// #define FILTER_SIZE 10
-// static float filterBufferX[FILTER_SIZE] = {0};
-// static float filterBufferY[FILTER_SIZE] = {0};
-// static float filterBufferZ[FILTER_SIZE] = {0};
-// static int filterIndex = 0;
-// static float filterSumX = 0;
-// static float filterSumY = 0;
-// static float filterSumZ = 0;
-// not sure about this
-struct bmi160_dev s_bmi160;
-//struct bmi160_accel_t accelData;
-
-
-// Structure for acceleration data
-typedef struct {
-    uint32_t ulTimeStamp;
-    float accelX;
-    float accelY;
-    float accelZ;
-    float avgAbsAccel;
-} AccelMessage;
 
 /*
  * The tasks as described in the comments at the top of this file.
  */
-static void prvAccelTask(void *pvParameters);
+static void prvLightSensorTask(void *pvParameters);
 // static void prvDISPTask(void *pvParameters);
 static void SignalSampling(TimerHandle_t timer);
 
@@ -162,13 +138,13 @@ void xTimerHandler(void);
 
 /*-----------------------------------------------------------*/
 
-void vCreateAccelTask(void)
+void vCreateLightSensorTask(void)
 {
     /* Configure the button to generate interrupts. */
     prvConfigureButton();
 
-    xTaskCreate(prvAccelTask,
-                "Accel Task",
+    xTaskCreate(prvLightSensorTask,
+                "Light Sensor Sensing",
                 configMINIMAL_STACK_SIZE,
                 NULL,
                 tskIDLE_PRIORITY,
@@ -187,100 +163,91 @@ void vCreateAccelTask(void)
 }
 /*-----------------------------------------------------------*/
 
-/*!
- *  @brief This internal API is used to initializes the bmi160 sensor
- *  settings like power mode and OSRS settings.
- *
- *  @param[in] void
- *
- *  @return void
- *
- */
-// static void init_bmi160(void)
-// {
-//     int8_t rslt;
-
-//     rslt = bmi160_init(&s_bmi160);
-
-//     if (rslt == BMI160_OK)
-//     {
-//         printf("BMI160 initialization success !\n");
-//         printf("Chip ID 0x%X\n", s_bmi160.chip_id);
-//     }
-//     else
-//     {
-//         printf("BMI160 initialization failure !\n");
-//     }
-// }
-
-
-static void prvAccelTask(void *pvParameters)
+static void prvLightSensorTask(void *pvParameters)
 {
+    UARTprintf("Light Sensor Task Started\n");
+    // Wait for sensor to power up (important!)
 
-    UARTprintf("Accel Task Started\n");
-    // Initialize the BMI160 sensor
-    if (bmi160_init(&s_bmi160) < 0) {
-        UARTprintf("[!] BMI160 Initilisation Failed\n");
+    // Now initialize the OPT3001 sensor
+    sensorOpt3001Init();
+
+    struct AMessage xMessage;
+
+    bool success;
+    uint16_t rawData = 0;
+    float convertedLux = 0;
+
+    float filterBuffer[FILTER_SIZE] = {0};
+    int filterIndex = 0;
+    float filterSum = 0;
+    float filteredLux = 0;
+
+    // Test that sensor is set up correctly
+    UARTprintf("Testing OPT3001 Sensor:\n");
+    success = sensorOpt3001Test();
+
+    // stay here until sensor is working
+    while (!success)
+    {
+        vTaskDelay(pdMS_TO_TICKS(100)); // Cooperative delay
+        UARTprintf("Test Failed, Trying again\n");
+        success = sensorOpt3001Test();
     }
-    UARTprintf("Initialisation Completed\n");
 
-    // AccelMessage accelMessage;
-
+    // Loop Forever
     while (1)
     {
-        // UARTprintf("Pizza\n");
-        // if (xSemaphoreTake(xSampleAccelSemaphore, portMAX_DELAY) == pdTRUE)
-        // {
-        //     // Read acceleration data
-        //     if (bmi160_read_accel_xyz(&accelData) == 0)
-        //     {
-        //         float accelX = accelData.x / 16384.0f; // Convert to g
-        //         float accelY = accelData.y / 16384.0f; // Convert to g
-        //         float accelZ = accelData.z / 16384.0f; // Convert to g
+        if (xSemaphoreTake(xSampleLightSemaphore, 0) == pdTRUE)
+        {
+            // sampling
+            success = sensorOpt3001Read(&rawData);
+            if (success)
+            {
+                sensorOpt3001Convert(rawData, &convertedLux);
+                filteredLux = MovingAverageFilter(filterBuffer, &filterIndex, &filterSum, FILTER_SIZE, convertedLux);
 
-        //         // Update moving average filters
-        //         filterSumX -= filterBufferX[filterIndex];
-        //         filterSumY -= filterBufferY[filterIndex];
-        //         filterSumZ -= filterBufferZ[filterIndex];
-
-        //         filterBufferX[filterIndex] = accelX;
-        //         filterBufferY[filterIndex] = accelY;
-        //         filterBufferZ[filterIndex] = accelZ;
-
-        //         filterSumX += accelX;
-        //         filterSumY += accelY;
-        //         filterSumZ += accelZ;
-
-        //         filterIndex = (filterIndex + 1) % FILTER_SIZE;
-
-        //         float filteredX = filterSumX / FILTER_SIZE;
-        //         float filteredY = filterSumY / FILTER_SIZE;
-        //         float filteredZ = filterSumZ / FILTER_SIZE;
-
-        //         // Calculate average absolute acceleration
-        //         float avgAbsAccel = (fabs(filteredX) + fabs(filteredY) + fabs(filteredZ)) / 3.0f;
-        //         UARTprintf("Filtered Accel: X: %.2f, Y: %.2f, Z: %.2f\n", filteredX, filteredY, filteredZ);
-        //     }
-        // }
+                // Set event bits based on thresholds
+                if (convertedLux > HIGH_THRESHOLD)
+                {
+                    xEventGroupSetBits(xEventGroup, EVENT_HIGH_THRESHOLD);
+                }
+                else if (convertedLux < LOW_THRESHOLD)
+                {
+                    xEventGroupSetBits(xEventGroup, EVENT_LOW_THRESHOLD);
+                }
+                // add to queue (both raw and filtered values)
+                xMessage.ulTimeStamp = xTaskGetTickCount();
+                xMessage.uFiltered = filteredLux;
+                xMessage.uRaw = convertedLux;
+                if (xQueueSend(xStructQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
+                {
+                    // UARTprintf("Data sent to queue: %d\n", (int)convertedLux);
+                }
+                else
+                {
+                    // UARTprintf("Error: Failed to send data to the queue\n");
+                }
+            }
+        }
     }
 }
 
 static void SignalSampling(TimerHandle_t timer)
 {
-    xSemaphoreGive(xSampleAccelSemaphore);
+    xSemaphoreGive(xSampleLightSemaphore);
 }
 
-void xI2CHandler(void)
-{
-    BaseType_t xSignalTaskWoken = pdFALSE;
+// void xI2CHandler(void)
+// {
+//     BaseType_t xSignalTaskWoken = pdFALSE;
 
-    // Clear interrupt
-    I2CMasterIntClear(I2C0_BASE);
+//     // Clear interrupt
+//     I2CMasterIntClear(I2C0_BASE);
 
-    // Only give the semaphore when the I2C bus is idle (transfer finished)
-    if (!I2CMasterBusy(I2C0_BASE))
-    {
-        xSemaphoreGiveFromISR(xIC2MasterSemaphore, &xSignalTaskWoken);
-        portYIELD_FROM_ISR(xSignalTaskWoken);
-    }
-}
+//     // Only give the semaphore when the I2C bus is idle (transfer finished)
+//     if (!I2CMasterBusy(I2C0_BASE))
+//     {
+//         xSemaphoreGiveFromISR(xIC2MasterSemaphore, &xSignalTaskWoken);
+//         portYIELD_FROM_ISR(xSignalTaskWoken);
+//     }
+// }
