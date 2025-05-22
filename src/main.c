@@ -1,5 +1,4 @@
 /*
- * hello
  *
  * Copyright (C) 2022 Texas Instruments Incorporated
  * 
@@ -36,12 +35,9 @@
 
 /******************************************************************************
  *
- * This motor test project provides an example of how to use the motor library
- * with a platformio / freeRTOS project. The main script initialises the hall 
- * sensor interrupt, which run the update_motor function. The program also launches 
- * a task that initialises the motors before ramping the speed from 10% to 100%.
- * Once the speed reaches 100%, the motor is stopped and the program ends.
- * 
+ * The example project combines the grlib_demo with the hello_freertos project.
+ * It demonstrates simple input and plotting functionality of grlib within a
+ * freertos task.
  */
 
 /* Standard includes. */
@@ -53,11 +49,13 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
+#include "semphr.h"
 /* Hardware includes. */
-#include "driverlib/pin_map.h"
 #include "inc/hw_memmap.h"
 #include "inc/hw_sysctl.h"
+#include "driverlib/interrupt.h"
 #include "inc/hw_ints.h"
+#include "driverlib/timer.h"
 #include "driverlib/gpio.h"
 #include "driverlib/interrupt.h"
 #include "driverlib/pin_map.h"
@@ -67,11 +65,7 @@
 #include "driverlib/uart.h"
 #include "drivers/rtos_hw_drivers.h"
 #include "utils/uartstdio.h"
-#include "driverlib/gpio.h"
-#include "driverlib/pwm.h"
-
-// Motor lib
-#include <motorlib.h>
+#include "includes/display_task.h"
 
 /*-----------------------------------------------------------*/
 
@@ -84,11 +78,8 @@ static void prvSetupHardware( void );
 /* This function sets up UART0 to be used for a console to display information
  * as the example is running. */
 static void prvConfigureUART(void);
-
-/* API to trigger the 'Hello world' task. */
-extern void vCreateMotorTask( void );
-
-static void prvConfigureHallInts( void );
+SemaphoreHandle_t xIC2MasterSemaphore = NULL;
+extern SemaphoreHandle_t xSemaphoreTimer0;
 
 /*-----------------------------------------------------------*/
 
@@ -97,8 +88,10 @@ int main( void )
     /* Prepare the hardware to run this demo. */
     prvSetupHardware();
 
+    xSemaphoreTimer0 = xSemaphoreCreateBinary();
+
     /* Create the Hello task to output a message over UART. */
-    vCreateMotorTask();
+    vCreateDisplayTask();
 
     /* Start the tasks and timer running. */
     vTaskStartScheduler();
@@ -111,6 +104,7 @@ int main( void )
     for( ;; );
 }
 /*-----------------------------------------------------------*/
+
 static void prvConfigureUART(void)
 {
     /* Enable GPIO port A which is used for UART0 pins.
@@ -138,7 +132,8 @@ static void prvConfigureUART(void)
 }
 /*-----------------------------------------------------------*/
 
-static void prvSetupHardware(void)
+
+static void prvSetupHardware( void )
 {
     /* Run from the PLL at configCPU_CLOCK_HZ MHz. */
     g_ui32SysClock = MAP_SysCtlClockFreqSet((SYSCTL_XTAL_25MHZ |
@@ -150,10 +145,7 @@ static void prvSetupHardware(void)
 
     /* Configure UART0 to send messages to terminal. */
     prvConfigureUART();
-
-    /* Set-up interrupts for hall sensors */
-    prvConfigureHallInts();
-
+    prvConfigureHWTimer(); // timer 0 A
 }
 /*-----------------------------------------------------------*/
 
@@ -172,20 +164,6 @@ void vApplicationMallocFailedHook( void )
     IntMasterDisable();
     for( ;; );
 }
-/*-----------------------------------------------------------*/
-static void prvConfigureHallInts( void )
-{
-
-    /* Configure GPIO ports to trigger an interrupt on rising/falling or both edges. */
-
-    /* Enable the interrupt for LaunchPad GPIO Port in the GPIO peripheral. */
-
-    /* Enable the Ports interrupt in the NVIC. */
-
-    /* Enable global interrupts in the NVIC. */
-    IntMasterEnable();
-}
-
 /*-----------------------------------------------------------*/
 
 void vApplicationIdleHook( void )
