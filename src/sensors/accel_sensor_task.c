@@ -128,27 +128,14 @@ extern uint32_t g_ui32SysClock;
 
 tContext sContext;
 // Moving average filter variables
-// #define FILTER_SIZE 10
-// static float filterBufferX[FILTER_SIZE] = {0};
-// static float filterBufferY[FILTER_SIZE] = {0};
-// static float filterBufferZ[FILTER_SIZE] = {0};
-// static int filterIndex = 0;
-// static float filterSumX = 0;
-// static float filterSumY = 0;
-// static float filterSumZ = 0;
-// not sure about this
-struct bmi160_dev s_bmi160;
-//struct bmi160_accel_t accelData;
-
-
-// Structure for acceleration data
-typedef struct {
-    uint32_t ulTimeStamp;
-    float accelX;
-    float accelY;
-    float accelZ;
-    float avgAbsAccel;
-} AccelMessage;
+#define FILTER_SIZE 10
+static float filterBufferX[FILTER_SIZE] = {0};
+static float filterBufferY[FILTER_SIZE] = {0};
+static float filterBufferZ[FILTER_SIZE] = {0};
+static int filterIndex = 0;
+static float filterSumX = 0;
+static float filterSumY = 0;
+static float filterSumZ = 0;
 
 /*
  * The tasks as described in the comments at the top of this file.
@@ -165,7 +152,7 @@ void xTimerHandler(void);
 void vCreateAccelTask(void)
 {
     /* Configure the button to generate interrupts. */
-    prvConfigureButton();
+    //prvConfigureButton();
 
     xTaskCreate(prvAccelTask,
                 "Accel Task",
@@ -185,83 +172,73 @@ void vCreateAccelTask(void)
         UARTprintf("Failed to start Light Sensor Timer\n");
     }
 }
-/*-----------------------------------------------------------*/
-
-/*!
- *  @brief This internal API is used to initializes the bmi160 sensor
- *  settings like power mode and OSRS settings.
- *
- *  @param[in] void
- *
- *  @return void
- *
- */
-// static void init_bmi160(void)
-// {
-//     int8_t rslt;
-
-//     rslt = bmi160_init(&s_bmi160);
-
-//     if (rslt == BMI160_OK)
-//     {
-//         printf("BMI160 initialization success !\n");
-//         printf("Chip ID 0x%X\n", s_bmi160.chip_id);
-//     }
-//     else
-//     {
-//         printf("BMI160 initialization failure !\n");
-//     }
-// }
-
 
 static void prvAccelTask(void *pvParameters)
 {
-
-    UARTprintf("Accel Task Started\n");
-    // Initialize the BMI160 sensor
-    if (bmi160_init(&s_bmi160) < 0) {
+    UARTprintf("[*] Starting Acceleration Task\n");
+    if (!sensorBMI160Init())
+    {
         UARTprintf("[!] BMI160 Initilisation Failed\n");
     }
     UARTprintf("Initialisation Completed\n");
+    SysCtlDelay(pdMS_TO_TICKS(200));
 
-    // AccelMessage accelMessage;
+    UARTprintf("[*] Running Tests...\n");
+    if (!sensorBMI160Test())
+    {
+        UARTprintf("Test Failed\n");
+    }
+
+    uint8_t status = 0;
+    readI2C(0x69, 0x1B, &status);
+    UARTprintf("Status: 0x%02X\n", status);
+
+    uint8_t rawData[20];
 
     while (1)
     {
-        // UARTprintf("Pizza\n");
-        // if (xSemaphoreTake(xSampleAccelSemaphore, portMAX_DELAY) == pdTRUE)
-        // {
-        //     // Read acceleration data
-        //     if (bmi160_read_accel_xyz(&accelData) == 0)
-        //     {
-        //         float accelX = accelData.x / 16384.0f; // Convert to g
-        //         float accelY = accelData.y / 16384.0f; // Convert to g
-        //         float accelZ = accelData.z / 16384.0f; // Convert to g
+        if (xSemaphoreTake(xSampleAccelSemaphore, portMAX_DELAY) == pdTRUE)
+        {
+            // UARTprintf("    Reading sensor...\n");
+            if (!sensorBMI160Read(rawData))
+            {
+                UARTprintf("[!] Error Reading\n");
+            }
 
-        //         // Update moving average filters
-        //         filterSumX -= filterBufferX[filterIndex];
-        //         filterSumY -= filterBufferY[filterIndex];
-        //         filterSumZ -= filterBufferZ[filterIndex];
+            // UARTprintf("RAW: %02X %02X %02X %02X %02X %02X\n", rawData[0], rawData[1], rawData[2], rawData[3], rawData[4], rawData[5]);
+            int16_t acc_x = (int16_t)((rawData[1] << 8) | rawData[0]);
+            int16_t acc_y = (int16_t)((rawData[3] << 8) | rawData[2]);
+            int16_t acc_z = (int16_t)((rawData[5] << 8) | rawData[4]);
 
-        //         filterBufferX[filterIndex] = accelX;
-        //         filterBufferY[filterIndex] = accelY;
-        //         filterBufferZ[filterIndex] = accelZ;
 
-        //         filterSumX += accelX;
-        //         filterSumY += accelY;
-        //         filterSumZ += accelZ;
+            UARTprintf("X: %d, Y: %d, X: %d\n", acc_x, acc_y, acc_z);
+            // float accelX = acc_x / 16384.0f; // Convert to g
+            // float accelY = acc_y / 16384.0f; // Convert to g
+            // float accelZ = acc_z / 16384.0f; // Convert to g
 
-        //         filterIndex = (filterIndex + 1) % FILTER_SIZE;
+            // // Update moving average filters
+            // filterSumX -= filterBufferX[filterIndex];
+            // filterSumY -= filterBufferY[filterIndex];
+            // filterSumZ -= filterBufferZ[filterIndex];
 
-        //         float filteredX = filterSumX / FILTER_SIZE;
-        //         float filteredY = filterSumY / FILTER_SIZE;
-        //         float filteredZ = filterSumZ / FILTER_SIZE;
+            // filterBufferX[filterIndex] = accelX;
+            // filterBufferY[filterIndex] = accelY;
+            // filterBufferZ[filterIndex] = accelZ;
 
-        //         // Calculate average absolute acceleration
-        //         float avgAbsAccel = (fabs(filteredX) + fabs(filteredY) + fabs(filteredZ)) / 3.0f;
-        //         UARTprintf("Filtered Accel: X: %.2f, Y: %.2f, Z: %.2f\n", filteredX, filteredY, filteredZ);
-        //     }
-        // }
+            // filterSumX += accelX;
+            // filterSumY += accelY;
+            // filterSumZ += accelZ;
+
+            // filterIndex = (filterIndex + 1) % FILTER_SIZE;
+
+            // float filteredX = filterSumX / FILTER_SIZE;
+            // float filteredY = filterSumY / FILTER_SIZE;
+            // float filteredZ = filterSumZ / FILTER_SIZE;
+
+            // // Calculate average absolute acceleration
+            // float avgAbsAccel = (fabs(filteredX) + fabs(filteredY) + fabs(filteredZ)) / 3.0f;
+            // UARTprintf("Filtered Accel: X: %.2f, Y: %.2f, Z: %.2f\n", filteredX, filteredY, filteredZ);
+        }
     }
 }
 
@@ -275,10 +252,10 @@ void xI2CHandler(void)
     BaseType_t xSignalTaskWoken = pdFALSE;
 
     // Clear interrupt
-    I2CMasterIntClear(I2C0_BASE);
+    I2CMasterIntClear(I2C2_BASE);
 
     // Only give the semaphore when the I2C bus is idle (transfer finished)
-    if (!I2CMasterBusy(I2C0_BASE))
+    if (!I2CMasterBusy(I2C2_BASE))
     {
         xSemaphoreGiveFromISR(xIC2MasterSemaphore, &xSignalTaskWoken);
         portYIELD_FROM_ISR(xSignalTaskWoken);

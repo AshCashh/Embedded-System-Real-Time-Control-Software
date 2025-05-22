@@ -130,6 +130,7 @@ int main( void )
     prvSetupHardware();
     /* Create the event group */
     xEventGroup = xEventGroupCreate();
+    UARTprintf("Starting System\n");
     if (xEventGroup == NULL)
     {
         UARTprintf("Failed to create Event Group\n");
@@ -173,12 +174,14 @@ int main( void )
     {
         /* Configure application specific hardware and initialize the task thread. */
         //vCreateLightSensorTask();
+        UARTprintf("Creating Tasks...\n");
         vCreateAccelTask();
 
-        vCreateDisplayTask();
+        //vCreateDisplayTask();
 
         /* Start the tasks. */
         vTaskStartScheduler();
+        UARTprintf("    Tasks Created\n");
     }
     else {
         UARTprintf("Semaphore creation failed\n");
@@ -228,15 +231,15 @@ static void prvConfigureI2C(void) {
     //
     // The I2C0 peripheral must be enabled before use.
     //
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_I2C0);
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_I2C2);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPION);
 
     //
     // Configure the pin muxing for I2C0 functions on port B2 and B3.
     // This step is not necessary if your part does not support pin muxing.
     //
-    GPIOPinConfigure(GPIO_PB2_I2C0SCL);
-    GPIOPinConfigure(GPIO_PB3_I2C0SDA);
+    GPIOPinConfigure(GPIO_PN5_I2C2SCL);
+    GPIOPinConfigure(GPIO_PN4_I2C2SDA);
 
     //
     // Select the I2C function for these pins.  This function will also
@@ -244,17 +247,16 @@ static void prvConfigureI2C(void) {
     // open-drain operation with weak pull-ups.  Consult the data sheet
     // to see which functions are allocated per pin.
     //
-    GPIOPinTypeI2CSCL(GPIO_PORTB_BASE, GPIO_PIN_2);
-    GPIOPinTypeI2C(GPIO_PORTB_BASE, GPIO_PIN_3);
+    GPIOPinTypeI2CSCL(GPIO_PORTN_BASE, GPIO_PIN_5);
+    GPIOPinTypeI2C(GPIO_PORTN_BASE, GPIO_PIN_4);
 
-    I2CMasterInitExpClk(I2C0_BASE, SysCtlClockGet(), false);
+    I2CMasterInitExpClk(I2C2_BASE, SysCtlClockGet(), false);
 
     // Enable I2C0 master interrupt generation
-    I2CMasterIntEnable(I2C0_BASE);  // Enables interrupt generation by I2C0 hardware
+    I2CMasterIntEnable(I2C2_BASE);  // Enables interrupt generation by I2C0 hardware
     
     // Enable I2C0 interrupt in the NVIC
-    IntEnable(INT_I2C0);
-
+    IntEnable(INT_I2C2);
 }
 
 static void prvConfigureHWTimer(void)

@@ -27,6 +27,17 @@ typedef struct AMessage
     uint32_t uFiltered;
 } AMessage;
 
+typedef struct {
+    uint32_t ulTimeStamp;
+    float acc_x;
+    float acc_y;
+    float acc_z;
+    float gyro_x;
+    float gyro_y;
+    float gyro_z;
+} BMI_s;
+
+
 // Function declarations
 void vCreateLightSensorTask(void);
 static void prvAccelTask(void *pvParameters);
