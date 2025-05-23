@@ -21,6 +21,7 @@
 #include "semphr.h"
 
 extern SemaphoreHandle_t xIC2MasterSemaphore;
+extern SemaphoreHandle_t xI2CMutex;
 /*
  * Sets slave address to ui8Addr
  * Puts ui8Reg followed by two data bytes in *data and transfers
@@ -28,26 +29,59 @@ extern SemaphoreHandle_t xIC2MasterSemaphore;
  */
 bool writeI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
 {
+    xSemaphoreTake(xI2CMutex, pdMS_TO_TICKS(50)); 
     // Load device slave address
-    I2CMasterSlaveAddrSet(I2C0_BASE, ui8Addr, false);
+    I2CMasterSlaveAddrSet(I2C2_BASE, ui8Addr, false);
 
     // Place the character to be sent in the data register
-    I2CMasterDataPut(I2C0_BASE, ui8Reg);
-    I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_SEND_START);
-    if (xSemaphoreTake(xIC2MasterSemaphore, portMAX_DELAY) != pdTRUE)
+    I2CMasterDataPut(I2C2_BASE, ui8Reg);
+    I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_START);
+    if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(50)) != pdTRUE)
         return false;
     // Send Data
-    I2CMasterDataPut(I2C0_BASE, data[0]);
-    I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_SEND_CONT);
-    if (xSemaphoreTake(xIC2MasterSemaphore, portMAX_DELAY) != pdTRUE)
+    I2CMasterDataPut(I2C2_BASE, data[0]);
+    I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_CONT);
+    if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(50)) != pdTRUE)
         return false;
-    I2CMasterDataPut(I2C0_BASE, data[1]);
-    I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_SEND_FINISH);
-    if (xSemaphoreTake(xIC2MasterSemaphore, portMAX_DELAY) != pdTRUE)
+    I2CMasterDataPut(I2C2_BASE, data[1]);
+    I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_FINISH);
+    if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(50)) != pdTRUE)
         return false;
+    xSemaphoreGive(xI2CMutex);
 
     return true;
 }
+
+/*
+ * Sets slave address to ui8Addr
+ * Puts ui8Reg followed by two data bytes in *data and transfers
+ * over i2c
+ */
+bool writeI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint8_t len)
+{
+    xSemaphoreTake(xI2CMutex, pdMS_TO_TICKS(50)); 
+    if (len == 0) return false;
+    I2CMasterSlaveAddrSet(I2C2_BASE, ui8Addr, false); // Write
+    I2CMasterDataPut(I2C2_BASE, ui8Reg);
+    I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_START);
+    if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(50)) != pdTRUE)
+        return false;
+    
+    for (uint8_t i = 0; i < len - 1; i++) {
+        I2CMasterDataPut(I2C2_BASE, data[i]);
+        I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_CONT);
+        if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(50)) != pdTRUE)
+            return false;
+    }
+    I2CMasterDataPut(I2C2_BASE, data[len - 1]);
+    I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_FINISH);
+    if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(50)) != pdTRUE)
+        return false;
+    xSemaphoreGive(xI2CMutex); 
+    return true;
+    
+}
+
 
 /*
  * Sets slave address to ui8Addr
@@ -58,29 +92,79 @@ bool writeI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
  */
 bool readI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
 {
+    xSemaphoreTake(xI2CMutex, pdMS_TO_TICKS(50)); 
     // Load device slave address and change I2C to write
-    I2CMasterSlaveAddrSet(I2C0_BASE, ui8Addr, false);
+    I2CMasterSlaveAddrSet(I2C2_BASE, ui8Addr, false);
 
     // Place the character to be sent in the data register
-    I2CMasterDataPut(I2C0_BASE, ui8Reg);
-    I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_SINGLE_SEND);
-    if (xSemaphoreTake(xIC2MasterSemaphore, portMAX_DELAY) != pdTRUE)
+    I2CMasterDataPut(I2C2_BASE, ui8Reg);
+    I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_SINGLE_SEND);
+    if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(50)) != pdTRUE)
         return false;
     // Load device slave address and change I2C to read
-    I2CMasterSlaveAddrSet(I2C0_BASE, ui8Addr, true);
+    I2CMasterSlaveAddrSet(I2C2_BASE, ui8Addr, true);
 
     // Read two bytes from I2C
-    I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_RECEIVE_START);
-    if (xSemaphoreTake(xIC2MasterSemaphore, portMAX_DELAY) != pdTRUE)
+    I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_RECEIVE_START);
+    if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(50)) != pdTRUE)
         return false;
-    data[0] = I2CMasterDataGet(I2C0_BASE);
+    data[0] = I2CMasterDataGet(I2C2_BASE);
 
-    I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_RECEIVE_FINISH);
-    if (xSemaphoreTake(xIC2MasterSemaphore, portMAX_DELAY) != pdTRUE)
+    I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_RECEIVE_FINISH);
+    if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(50)) != pdTRUE)
         return false;
-    data[1] = I2CMasterDataGet(I2C0_BASE);
+    data[1] = I2CMasterDataGet(I2C2_BASE);
+    xSemaphoreGive(xI2CMutex); 
 
     return true;
 }
 
 
+bool readI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint16_t len)
+{
+    if (len < 1)
+        return false;
+
+    xSemaphoreTake(xI2CMutex, pdMS_TO_TICKS(50)); 
+    // Write register address (no stop)
+    I2CMasterSlaveAddrSet(I2C2_BASE, ui8Addr, false); // Write
+    I2CMasterDataPut(I2C2_BASE, ui8Reg);
+    I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_START);
+    if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(50)) != pdTRUE)
+        return false;
+
+    I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_FINISH); // Send stop
+    if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(50)) != pdTRUE)
+        return false;
+
+    // Restart in read mode
+    I2CMasterSlaveAddrSet(I2C2_BASE, ui8Addr, true); // Read
+
+    // First byte (START)
+    I2CMasterControl(I2C2_BASE, len == 1 ?
+                     I2C_MASTER_CMD_SINGLE_RECEIVE :
+                     I2C_MASTER_CMD_BURST_RECEIVE_START);
+    if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(50)) != pdTRUE)
+        return false;
+    data[0] = I2CMasterDataGet(I2C2_BASE);
+    
+
+    // Middle bytes (CONT)
+    for (uint16_t i = 1; i < len - 1; i++) {
+        I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_RECEIVE_CONT);
+        if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(50)) != pdTRUE)
+            return false;
+        data[i] = I2CMasterDataGet(I2C2_BASE);
+    }
+
+    // Last byte (FINISH)
+    if (len > 1) {
+        I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_RECEIVE_FINISH);
+        if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(50)) != pdTRUE)
+            return false;
+        data[len - 1] = I2CMasterDataGet(I2C2_BASE);
+    }
+    xSemaphoreGive(xI2CMutex); 
+
+    return true;
+}

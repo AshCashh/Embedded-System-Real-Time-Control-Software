@@ -35,63 +35,149 @@
 
 /******************************************************************************
  *
- * The example project combines the grlib_demo with the hello_freertos project.
- * It demonstrates simple input and plotting functionality of grlib within a
- * freertos task.
- */
 
 /* Standard includes. */
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdint.h>
 
+
 /* Kernel includes. */
 #include "FreeRTOS.h"
 #include "task.h"
+#include "semphr.h"
 
 #include "semphr.h"
 /* Hardware includes. */
+#include "inc/hw_ints.h"
+#include "inc/hw_memmap.h"
 #include "inc/hw_memmap.h"
 #include "inc/hw_sysctl.h"
 #include "driverlib/interrupt.h"
 #include "inc/hw_ints.h"
 #include "driverlib/timer.h"
 #include "driverlib/gpio.h"
-#include "driverlib/interrupt.h"
 #include "driverlib/pin_map.h"
+#include "inc/hw_sysctl.h"
+#include "driverlib/interrupt.h"
 #include "driverlib/rom.h"
+#include "driverlib/timer.h"
 #include "driverlib/rom_map.h"
 #include "driverlib/sysctl.h"
+#include "drivers/rtos_hw_drivers.h"
 #include "driverlib/uart.h"
 #include "drivers/rtos_hw_drivers.h"
 #include "utils/uartstdio.h"
+#include "driverlib/i2c.h"
+#include "drivers/opt3001.h"
 #include "includes/display_task.h"
 
+#include "includes/accel_sensor_task.h"
+#include "includes/light_sensor_task.h"
+#include "includes/display_task.h"
+#include "includes/common.h"
 /*-----------------------------------------------------------*/
 
 /* The system clock frequency. */
 uint32_t g_ui32SysClock;
 
-/* Set up the hardware ready to run this demo. */
-static void prvSetupHardware( void );
-
-/* This function sets up UART0 to be used for a console to display information
- * as the example is running. */
-static void prvConfigureUART(void);
+volatile uint32_t g_ui32TimeStamp = 0;
+/* Global for binary semaphore shared between tasks. */
+SemaphoreHandle_t xButton1Semaphore = NULL;
+SemaphoreHandle_t xButton2Semaphore = NULL;
 SemaphoreHandle_t xIC2MasterSemaphore = NULL;
+SemaphoreHandle_t xSampleLightSemaphore = NULL;
+SemaphoreHandle_t xSampleAccelSemaphore = NULL;
+SemaphoreHandle_t xI2CMutex = NULL;
 extern SemaphoreHandle_t xSemaphoreTimer0;
 
+/* Set up the clock and pin configurations to run this example. */
+static void prvSetupHardware( void );
+
+
+/* This function sets up UART0 to be used for a console to display information */
+static void prvConfigureUART(void);
+static void prvConfigureI2C(void); // configures I2C for sensor communication
+static void prvBMI160DataReady(void);
+
+
+QueueHandle_t xStructQueue = NULL; // Define the variable here
+/*
+ * Queue used to send and receive pointers to struct AMessage structures.
+ */
+QueueHandle_t xPointerQueue = NULL;
+EventGroupHandle_t xEventGroup = NULL;
 /*-----------------------------------------------------------*/
 
 int main( void )
 {
-    /* Prepare the hardware to run this demo. */
+    /* Prepare hardware */
     prvSetupHardware();
+    /* Create the event group */
+    xEventGroup = xEventGroupCreate();
+    UARTprintf("Starting System\n");
+    if (xEventGroup == NULL)
+    {
+        UARTprintf("Failed to create Event Group\n");
+    
+    }
+    
+    /* Create the queue used to send complete struct AMessage structures.  This can
+    also be created after the schedule starts, but care must be task to ensure
+    nothing uses the queue until after it has been created. */
+    xStructQueue = xQueueCreate(
+        /* The number of items the queue can hold. */
+        mainQUEUE_LENGTH,
+        /* Size of each item is big enough to hold the
+        whole structure. */
+        sizeof(AMessage));
+    
 
+    /* Create the queue used to send pointers to struct AMessage structures. */
+    xPointerQueue = xQueueCreate(
+        /* The number of items the queue can hold. */
+        mainQUEUE_LENGTH,
+        /* Size of each item is big enough to hold only a
+        pointer. */
+        sizeof(AMessage));
+
+    if ((xStructQueue == NULL) || (xPointerQueue == NULL))
+    {
+    }
+
+    /* Create the binary semaphore used to synchronize the button ISR and the
+     * button processing task. */
+    xButton1Semaphore = xSemaphoreCreateBinary();
+    xButton2Semaphore = xSemaphoreCreateBinary();
+    xIC2MasterSemaphore = xSemaphoreCreateBinary();
+    xSampleLightSemaphore = xSemaphoreCreateBinary();
+    xSampleAccelSemaphore = xSemaphoreCreateBinary();
+    xI2CMutex = xSemaphoreCreateMutex();
     xSemaphoreTimer0 = xSemaphoreCreateBinary();
 
-    /* Create the Hello task to output a message over UART. */
-    vCreateDisplayTask();
+
+
+    if ( xButton1Semaphore != NULL && xButton2Semaphore != NULL && xIC2MasterSemaphore != NULL && xSampleLightSemaphore != NULL && xI2CMutex != NULL)
+    {
+        /* Configure application specific hardware and initialize the task thread. */
+        vCreateLightSensorTask();
+        UARTprintf("Creating Tasks...\n");
+        vCreateAccelTask();
+
+        //vCreateDisplayTask();
+
+        /* Start the tasks. */
+        vTaskStartScheduler();
+        UARTprintf("    Tasks Created\n");
+      
+          
+
+        /* Create the Hello task to output a message over UART. */
+        vCreateDisplayTask();
+    }
+    else {
+        UARTprintf("Semaphore creation failed\n");
+    }
 
     /* Start the tasks and timer running. */
     vTaskStartScheduler();
@@ -105,6 +191,52 @@ int main( void )
 }
 /*-----------------------------------------------------------*/
 
+// SMBus Interrupt for PORT P Pin 2 (OPT_INT)
+static void prvConfigSMBusINT(void) {
+
+    // Enable GPIO port for the INT pin
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOM);
+
+    // Configure pull-up resistor?
+    GPIOPinTypeGPIOInput(GPIO_PORTM_BASE, GPIO_PIN_6);
+    GPIOPadConfigSet(GPIO_PORTM_BASE, GPIO_PIN_6, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+
+    // trigger on the falling edge
+    GPIOIntTypeSet(GPIO_PORTM_BASE, GPIO_PIN_6, GPIO_FALLING_EDGE);
+
+    // enable GPIOP interrupt
+    GPIOIntEnable(GPIO_PORTM_BASE, GPIO_PIN_6);
+
+    IntEnable(INT_GPIOM);
+
+    // enable interrupts
+    IntMasterEnable();
+}
+
+
+// config BMI160 data ready interrupt on Port P Pin 3
+static void prvBMI160DataReady(void) {
+    // Enable GPIO port for the INT pin
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOP);
+
+    // Configure pull-up resistor?
+    GPIOPinTypeGPIOInput(GPIO_PORTP_BASE, GPIO_PIN_3);
+    GPIOPadConfigSet(GPIO_PORTP_BASE, GPIO_PIN_3, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+
+    // trigger on the falling edge
+    GPIOIntTypeSet(GPIO_PORTP_BASE, GPIO_PIN_3, GPIO_FALLING_EDGE);
+    GPIOIntClear(GPIO_PORTP_BASE, GPIO_PIN_3);
+    // enable GPIOP interrupt
+    GPIOIntEnable(GPIO_PORTP_BASE, GPIO_PIN_3);
+
+    IntEnable(INT_GPIOP3);
+
+    // enable interrupts
+    IntMasterEnable();
+    
+}
+
+// config UART
 static void prvConfigureUART(void)
 {
     /* Enable GPIO port A which is used for UART0 pins.
@@ -129,8 +261,69 @@ static void prvConfigureUART(void)
 
     /* Initialize the UART for console I/O. */
     UARTStdioConfig(0, 9600, 16000000);
+    SysCtlDelay(g_ui32SysClock); // ~1 second delay at 120MHz to ensure UART initialises before using UARTprintf
 }
-/*-----------------------------------------------------------*/
+
+// config I2C
+static void prvConfigureI2C(void) {
+    //
+    // The I2C0 peripheral must be enabled before use.
+    //
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_I2C2);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPION);
+
+    //
+    // Configure the pin muxing for I2C0 functions on port B2 and B3.
+    // This step is not necessary if your part does not support pin muxing.
+    //
+    GPIOPinConfigure(GPIO_PN5_I2C2SCL);
+    GPIOPinConfigure(GPIO_PN4_I2C2SDA);
+
+    //
+    // Select the I2C function for these pins.  This function will also
+    // configure the GPIO pins pins for I2C operation, setting them to
+    // open-drain operation with weak pull-ups.  Consult the data sheet
+    // to see which functions are allocated per pin.
+    //
+    GPIOPinTypeI2CSCL(GPIO_PORTN_BASE, GPIO_PIN_5);
+    GPIOPinTypeI2C(GPIO_PORTN_BASE, GPIO_PIN_4);
+
+    I2CMasterInitExpClk(I2C2_BASE, SysCtlClockGet(), false);
+
+    // Enable I2C0 master interrupt generation
+    I2CMasterIntEnable(I2C2_BASE);  // Enables interrupt generation by I2C0 hardware
+    
+    // Enable I2C0 interrupt in the NVIC
+    IntEnable(INT_I2C2);
+}
+
+static void prvConfigureHWTimer(void)
+{
+    /* The Timer 0 peripheral must be enabled for use. */
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER0);
+
+    /* Configure Timer 0 in full-width periodic mode. */
+    TimerConfigure(TIMER0_BASE, TIMER_CFG_PERIODIC);
+
+    /* Set the Timer 0A load value to run at 10 Hz. */
+    TimerLoadSet(TIMER0_BASE, TIMER_A, g_ui32SysClock / 10);
+
+    /* Configure the Timer 0A interrupt for timeout. */
+    TimerIntEnable(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
+
+
+    /* Enable the Timer 0A interrupt in the NVIC. */
+    IntEnable(INT_TIMER0A);
+
+    /* Enable global interrupts in the NVIC. */
+    IntMasterEnable();
+
+    //
+    // Start the timer used in this example Task
+    // You may need change where this timer is enabled
+    //
+    TimerEnable(TIMER0_BASE, TIMER_A);
+}
 
 
 static void prvSetupHardware( void )
@@ -142,9 +335,11 @@ static void prvSetupHardware( void )
 
     /* Configure device pins. */
     PinoutSet(false, false);
-
-    /* Configure UART0 to send messages to terminal. */
     prvConfigureUART();
+    prvConfigureI2C();
+    prvBMI160DataReady();
+    // prvConfigSMBusINT();
+    //prvConfigureHWTimer();
     prvConfigureHWTimer(); // timer 0 A
 }
 /*-----------------------------------------------------------*/
@@ -179,6 +374,20 @@ void vApplicationIdleHook( void )
     memory allocated by the kernel to any task that has since been deleted. */
 }
 /*-----------------------------------------------------------*/
+
+void vApplicationTickHook( void )
+{
+    /* This function will be called by each tick interrupt if
+        configUSE_TICK_HOOK is set to 1 in FreeRTOSConfig.h.  User code can be
+        added here, but the tick hook is called from an interrupt context, so
+        code must not attempt to block, and only the interrupt safe FreeRTOS API
+        functions can be used (those that end in FromISR()). */
+
+    /* Only the full demo uses the tick hook so there is no code is
+        executed here. */
+}
+/*-----------------------------------------------------------*/
+
 
 void vApplicationStackOverflowHook( TaskHandle_t pxTask, char *pcTaskName )
 {
