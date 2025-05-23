@@ -198,7 +198,7 @@ static void prvLightSensorTask(void *pvParameters)
     // Loop Forever
     while (1)
     {
-        if (xSemaphoreTake(xSampleLightSemaphore, 0) == pdTRUE)
+        if (xSemaphoreTake(xSampleLightSemaphore, pdMS_TO_TICKS(50)) == pdTRUE)
         {
             // sampling
             success = sensorOpt3001Read(&rawData);
@@ -220,14 +220,15 @@ static void prvLightSensorTask(void *pvParameters)
                 xMessage.ulTimeStamp = xTaskGetTickCount();
                 xMessage.uFiltered = filteredLux;
                 xMessage.uRaw = convertedLux;
-                if (xQueueSend(xStructQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
-                {
-                    UARTprintf("Data sent to queue: %d\n", (int)convertedLux);
-                }
-                else
-                {
-                    // UARTprintf("Error: Failed to send data to the queue\n");
-                }
+                UARTprintf("Lux: %d\n",  xMessage.uRaw);
+                // if (xQueueSend(xStructQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
+                // {
+                //     UARTprintf("Data sent to queue: %d\n", (int)convertedLux);
+                // }
+                // else
+                // {
+                //     UARTprintf("Error: Failed to send data to the queue\n");
+                // }
             }
         }
     }
@@ -235,7 +236,7 @@ static void prvLightSensorTask(void *pvParameters)
 
 static void SignalSampling(TimerHandle_t timer)
 {
-    
+    xSemaphoreGive(xSampleLightSemaphore);
 }
 
 

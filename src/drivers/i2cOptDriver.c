@@ -21,6 +21,7 @@
 #include "semphr.h"
 
 extern SemaphoreHandle_t xIC2MasterSemaphore;
+extern SemaphoreHandle_t xI2CMutex;
 /*
  * Sets slave address to ui8Addr
  * Puts ui8Reg followed by two data bytes in *data and transfers
@@ -28,6 +29,7 @@ extern SemaphoreHandle_t xIC2MasterSemaphore;
  */
 bool writeI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
 {
+    xSemaphoreTake(xI2CMutex, pdMS_TO_TICKS(50)); 
     // Load device slave address
     I2CMasterSlaveAddrSet(I2C2_BASE, ui8Addr, false);
 
@@ -45,6 +47,7 @@ bool writeI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
     I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_FINISH);
     if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(50)) != pdTRUE)
         return false;
+    xSemaphoreGive(xI2CMutex);
 
     return true;
 }
@@ -56,6 +59,7 @@ bool writeI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
  */
 bool writeI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint8_t len)
 {
+    xSemaphoreTake(xI2CMutex, pdMS_TO_TICKS(50)); 
     if (len == 0) return false;
     I2CMasterSlaveAddrSet(I2C2_BASE, ui8Addr, false); // Write
     I2CMasterDataPut(I2C2_BASE, ui8Reg);
@@ -73,7 +77,9 @@ bool writeI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint8_t len)
     I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_FINISH);
     if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(50)) != pdTRUE)
         return false;
+    xSemaphoreGive(xI2CMutex); 
     return true;
+    
 }
 
 
@@ -86,6 +92,7 @@ bool writeI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint8_t len)
  */
 bool readI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
 {
+    xSemaphoreTake(xI2CMutex, pdMS_TO_TICKS(50)); 
     // Load device slave address and change I2C to write
     I2CMasterSlaveAddrSet(I2C2_BASE, ui8Addr, false);
 
@@ -107,6 +114,7 @@ bool readI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
     if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(50)) != pdTRUE)
         return false;
     data[1] = I2CMasterDataGet(I2C2_BASE);
+    xSemaphoreGive(xI2CMutex); 
 
     return true;
 }
@@ -117,6 +125,7 @@ bool readI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint16_t len)
     if (len < 1)
         return false;
 
+    xSemaphoreTake(xI2CMutex, pdMS_TO_TICKS(50)); 
     // Write register address (no stop)
     I2CMasterSlaveAddrSet(I2C2_BASE, ui8Addr, false); // Write
     I2CMasterDataPut(I2C2_BASE, ui8Reg);
@@ -155,6 +164,7 @@ bool readI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint16_t len)
             return false;
         data[len - 1] = I2CMasterDataGet(I2C2_BASE);
     }
+    xSemaphoreGive(xI2CMutex); 
 
     return true;
 }

@@ -107,6 +107,8 @@ SemaphoreHandle_t xButton2Semaphore = NULL;
 SemaphoreHandle_t xIC2MasterSemaphore = NULL;
 SemaphoreHandle_t xSampleLightSemaphore = NULL;
 SemaphoreHandle_t xSampleAccelSemaphore = NULL;
+SemaphoreHandle_t xI2CMutex = NULL;
+
 
 /* Set up the clock and pin configurations to run this example. */
 static void prvSetupHardware( void );
@@ -168,13 +170,14 @@ int main( void )
     xIC2MasterSemaphore = xSemaphoreCreateBinary();
     xSampleLightSemaphore = xSemaphoreCreateBinary();
     xSampleAccelSemaphore = xSemaphoreCreateBinary();
+    xI2CMutex = xSemaphoreCreateMutex();
 
 
 
-    if ( xButton1Semaphore != NULL && xButton2Semaphore != NULL && xIC2MasterSemaphore != NULL && xSampleLightSemaphore != NULL)
+    if ( xButton1Semaphore != NULL && xButton2Semaphore != NULL && xIC2MasterSemaphore != NULL && xSampleLightSemaphore != NULL && xI2CMutex != NULL)
     {
         /* Configure application specific hardware and initialize the task thread. */
-        // vCreateLightSensorTask();
+        vCreateLightSensorTask();
         UARTprintf("Creating Tasks...\n");
         vCreateAccelTask();
 
