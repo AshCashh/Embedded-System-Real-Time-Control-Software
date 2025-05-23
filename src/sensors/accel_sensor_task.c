@@ -129,7 +129,7 @@ extern uint32_t g_ui32SysClock;
 
 tContext sContext;
 // Moving average filter variables
-#define FILTER_SIZE 4
+#define FILTER_SIZE 10
 static float filterBufferX[FILTER_SIZE] = {0};
 static float filterBufferY[FILTER_SIZE] = {0};
 static float filterBufferZ[FILTER_SIZE] = {0};
@@ -143,7 +143,6 @@ static float filterSumZ = 0;
  */
 static void prvAccelTask(void *pvParameters);
 // static void prvDISPTask(void *pvParameters);
-static void SignalSampling(TimerHandle_t timer);
 
 /* Handles the timer interrupt and signals when the read/write task is completed */
 void xTimerHandler(void);
@@ -162,17 +161,6 @@ void vCreateAccelTask(void)
                 NULL,
                 tskIDLE_PRIORITY,
                 NULL);
-    TimerHandle_t timer = xTimerCreate(
-        "Light Sensor Sensing",
-        pdMS_TO_TICKS(100),
-        pdTRUE,
-        0,
-        SignalSampling);
-
-    if (xTimerStart(timer, 0) != pdPASS)
-    {
-        UARTprintf("Failed to start Light Sensor Timer\n");
-    }
 }
 
 static void prvAccelTask(void *pvParameters)
@@ -196,16 +184,33 @@ static void prvAccelTask(void *pvParameters)
     UARTprintf("Status: 0x%02X\n", status);
 
     uint8_t rawData[20];
+    static uint32_t lastTick = 0;
+    static uint32_t sampleCounter = 0;
+
 
     while (1)
     {
-        if (xSemaphoreTake(xSampleAccelSemaphore, portMAX_DELAY) == pdTRUE)
+        if (xSemaphoreTake(xSampleAccelSemaphore, pdMS_TO_TICKS(20)) == pdTRUE)
         {
             // UARTprintf("    Reading sensor...\n");
             if (!sensorBMI160Read(rawData))
             {
                 UARTprintf("[!] Error Reading\n");
             }
+            // uint32_t currentTick = xTaskGetTickCount();
+            //     sampleCounter++;
+            // if (sampleCounter >= 100)  // Log every 20 samples (~every 200 ms at 100 Hz)
+            // {
+            //     if (lastTick != 0) {
+            //         uint32_t delta = currentTick - lastTick;
+            //         float frequency = (1000.0f * sampleCounter) / delta;  // ticks in ms
+            //         float avgInterval = (float)delta / sampleCounter;
+            //         UARTprintf("Avg interval: %d ms, approx %d Hz\n", (int)avgInterval, (int)frequency);
+            //     }
+            //     lastTick = currentTick;
+            //     sampleCounter = 0;
+            // }
+
 
             // UARTprintf("RAW: %02X %02X %02X %02X %02X %02X\n", rawData[0], rawData[1], rawData[2], rawData[3], rawData[4], rawData[5]);
             int16_t acc_x = (int16_t)((rawData[1] << 8) | rawData[0]);
@@ -220,6 +225,7 @@ static void prvAccelTask(void *pvParameters)
             float accelX = acc_x / 16384.0f * 9.80665; // Convert to SI m/s
             float accelY = acc_y / 16384.0f * 9.80665; // Convert to SI m/s
             float accelZ = (acc_z / 16384.0f * 9.80665); // Convert to SI m/s and cancel out gravity
+
 
             // Update moving average filters
             filterSumX -= filterBufferX[filterIndex];
@@ -251,11 +257,6 @@ static void prvAccelTask(void *pvParameters)
     }
 }
 
-static void SignalSampling(TimerHandle_t timer)
-{
-
-}
-
 void xI2CHandler(void)
 {
     BaseType_t xSignalTaskWoken = pdFALSE;
@@ -272,6 +273,11 @@ void xI2CHandler(void)
 }
 
 void xBMI160DataReadyHandler(void) {
+    BaseType_t xSignalTaskWoken = pdFALSE;
+    // static uint32_t lastTick = 0;
+    // uint32_t now = xTaskGetTickCount();
+    // UARTprintf("delta=%d\n", now, now - lastTick);
+    // lastTick = now;
     GPIOIntClear(GPIO_PORTP_BASE, GPIO_PIN_3);
-    xSemaphoreGive(xSampleAccelSemaphore);
+    xSemaphoreGiveFromISR(xSampleAccelSemaphore, &xSignalTaskWoken);
 }

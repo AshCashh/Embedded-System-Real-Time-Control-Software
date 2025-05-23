@@ -47,6 +47,7 @@ extern void xPortSysTickHandler(void);
 extern void xButtonsHandler(void);
 extern void xI2CHandler(void);
 extern void xBMI160DataReadyHandler(void);
+extern void xOptIntHandler(void);
 
 //*****************************************************************************
 //
@@ -160,7 +161,7 @@ void (* const g_pfnVectors[])(void) =
     0,                                      // Reserved
     IntDefaultHandler,                      // I2C4 Master and Slave
     IntDefaultHandler,                      // I2C5 Master and Slave
-    IntDefaultHandler,                      // GPIO Port M
+    xOptIntHandler,                      // GPIO Port M
     IntDefaultHandler,                      // GPIO Port N
     0,                                      // Reserved
     IntDefaultHandler,                      // Tamper

@@ -174,7 +174,7 @@ int main( void )
     if ( xButton1Semaphore != NULL && xButton2Semaphore != NULL && xIC2MasterSemaphore != NULL && xSampleLightSemaphore != NULL)
     {
         /* Configure application specific hardware and initialize the task thread. */
-        //vCreateLightSensorTask();
+        // vCreateLightSensorTask();
         UARTprintf("Creating Tasks...\n");
         vCreateAccelTask();
 
@@ -197,27 +197,27 @@ int main( void )
 }
 /*-----------------------------------------------------------*/
 
-// // SMBus Interrupt for PORT P Pin 2 (OPT_INT)
-// static void prvConfigSMBusINT(void) {
+// SMBus Interrupt for PORT P Pin 2 (OPT_INT)
+static void prvConfigSMBusINT(void) {
 
-//     // Enable GPIO port for the INT pin
-//     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOP);
+    // Enable GPIO port for the INT pin
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOM);
 
-//     // Configure pull-up resistor?
-//     GPIOPinTypeGPIOInput(GPIO_PORTP_BASE, GPIO_PIN_2);
-//     GPIOPadConfigSet(GPIO_PORTP_BASE, GPIO_PIN_2, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+    // Configure pull-up resistor?
+    GPIOPinTypeGPIOInput(GPIO_PORTM_BASE, GPIO_PIN_6);
+    GPIOPadConfigSet(GPIO_PORTM_BASE, GPIO_PIN_6, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
 
-//     // trigger on the falling edge
-//     GPIOIntTypeSet(GPIO_PORTP_BASE, GPIO_PIN_2, GPIO_FALLING_EDGE);
+    // trigger on the falling edge
+    GPIOIntTypeSet(GPIO_PORTM_BASE, GPIO_PIN_6, GPIO_FALLING_EDGE);
 
-//     // enable GPIOP interrupt
-//     GPIOIntEnable(GPIO_PORTP_BASE, GPIO_PIN_2);
+    // enable GPIOP interrupt
+    GPIOIntEnable(GPIO_PORTM_BASE, GPIO_PIN_6);
 
-//     IntEnable(INT_GPIOP2);
+    IntEnable(INT_GPIOM);
 
-//     // enable interrupts
-//     IntMasterEnable();
-// }
+    // enable interrupts
+    IntMasterEnable();
+}
 
 
 // config BMI160 data ready interrupt on Port P Pin 3
@@ -343,6 +343,7 @@ static void prvSetupHardware( void )
     prvConfigureUART();
     prvConfigureI2C();
     prvBMI160DataReady();
+    // prvConfigSMBusINT();
     //prvConfigureHWTimer();
 }
 /*-----------------------------------------------------------*/

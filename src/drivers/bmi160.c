@@ -28,19 +28,17 @@
 // #define REG_LOW_LIMIT                   0x02
 // #define REG_HIGH_LIMIT                  0x03
 
-#define MAG_GYR_ACC 0x04 // reigster address for if we want mag aswel
-#define REG_ACC_RESULT 0x12     // register adress for if we just want gyro and acceleration
-#define REG_CHIP_ID 0x00 // chip ID storage location
+#define MAG_GYR_ACC 0x04    // reigster address for if we want mag aswel
+#define REG_ACC_RESULT 0x12 // register adress for if we just want gyro and acceleration
+#define REG_CHIP_ID 0x00    // chip ID storage location
 #define REG_ERROR 0x02
-#define REG_CMD 0x7E // Command register triggers operations like softreset, NVM programming etc
-#define REG_ACC_CONF 0x40 // acceleration sensor config register
-#define REG_ACC_RANGE 0x41 // selection of the accelerometer g-range.
-#define REG_INT_EN 0x50 // enable interrupts register
-#define REG_PMU_STATUS 0x03 // read power status of chip
+#define REG_CMD 0x7E         // Command register triggers operations like softreset, NVM programming etc
+#define REG_ACC_CONF 0x40    // acceleration sensor config register
+#define REG_ACC_RANGE 0x41   // selection of the accelerometer g-range.
+#define REG_INT_EN 0x50      // enable interrupts register
+#define REG_PMU_STATUS 0x03  // read power status of chip
 #define REG_IN_OUT_CTRL 0x53 // pullup for INT1 and 2 pins
-#define REG_DR_INT_MAP 0x56 // data ready interrupt map to either INT1 (7:4) or INT2 (3:0)
-
-
+#define REG_DR_INT_MAP 0x56  // data ready interrupt map to either INT1 (7:4) or INT2 (3:0)
 
 /* Register values */
 #define CHIP_ID 0xD1 // chip id check
@@ -73,21 +71,25 @@ bool sensorBMI160Init(void)
     // softreset value to cmd reg
     uint8_t val = 0xB6;
     // reset sensor
-    if (!writeI2C_acc(BMI160_IC2_ADDRESS_VDDIO, REG_CMD, &val, 1)) {
+    if (!writeI2C_acc(BMI160_IC2_ADDRESS_VDDIO, REG_CMD, &val, 1))
+    {
         return false;
     }
     vTaskDelay(pdMS_TO_TICKS(100));
+    
 
     // enable accelerometer
     // Repeatedly attempt to set accel to normal mode (it wont wake up sometimes)
     uint8_t pwd = 0x00;
-    while (pwd == 0x00) {
+    while (pwd == 0x00)
+    {
         val = 0x11;
         writeI2C_acc(BMI160_IC2_ADDRESS_VDDIO, 0x7E, &val, 1);
         vTaskDelay(pdMS_TO_TICKS(10));
 
         readI2C(BMI160_IC2_ADDRESS_VDDIO, REG_PMU_STATUS, &val); // PMU_STATUS
-        if ((val & 0x30) == 0x10) {
+        if ((val & 0x30) == 0x10)
+        {
             UARTprintf("[W] Accel in Normal Mode\n");
             break;
         }
@@ -95,45 +97,47 @@ bool sensorBMI160Init(void)
         UARTprintf("[!] Accel still in suspend (PMU_STATUS: 0x%02X), retrying...\n", val);
     }
 
-
     uint8_t acc_range = 0b0011;
-    if (!writeI2C_acc(BMI160_IC2_ADDRESS_VDDIO, REG_ACC_RANGE, &acc_range, 1)) {
+    if (!writeI2C_acc(BMI160_IC2_ADDRESS_VDDIO, REG_ACC_RANGE, &acc_range, 1))
+    {
         return false;
     }
     vTaskDelay(pdMS_TO_TICKS(10));
     // config accelerometer
-    val = 0x28; // 0x08 << 4 | 0x03 -> ODR 100Hz, ±2g
-    if (!writeI2C(BMI160_IC2_ADDRESS_VDDIO, REG_ACC_CONF, &val)) {
+    val =  0x28; // freq
+    if (!writeI2C_acc(BMI160_IC2_ADDRESS_VDDIO, REG_ACC_CONF, &val, 1))
+    {
         return false;
     }
 
     /* ------ Set up Interrupts on chip ------ */
     // map data ready interrupt to INT2
-    uint8_t int1_en_dr = (1 << 3);// enable data ready interrupt (bit 3 for INT2)
-    if (!writeI2C_acc(BMI160_IC2_ADDRESS_VDDIO, REG_DR_INT_MAP, &int1_en_dr, 1)) {
+    uint8_t int1_en_dr = (1 << 3); // enable data ready interrupt 
+    if (!writeI2C_acc(BMI160_IC2_ADDRESS_VDDIO, REG_DR_INT_MAP, &int1_en_dr, 1))
+    {
         return false;
     }
 
     // Pull up resistor for INT2
     uint8_t int_behaviour =
-        (1 << 7)  // INT2 output enabled 
-        | (0 << 6)  // INT2 push-pull/open-drain 
-        | (1 << 5);  // INT2 active high
-    if (!writeI2C_acc(BMI160_IC2_ADDRESS_VDDIO, REG_IN_OUT_CTRL, &int_behaviour, 1)) {
+        (1 << 7)    // INT2 output enabled
+        | (0 << 6)  // INT2 push-pull/open-drain
+        | (1 << 5); // INT2 active high
+    if (!writeI2C_acc(BMI160_IC2_ADDRESS_VDDIO, REG_IN_OUT_CTRL, &int_behaviour, 1))
+    {
         return false;
     }
-
 
     // enable data ready interrupt, 1 for [1] mask
     uint8_t data_ready_int = 0b00010000;
-    if (!writeI2C_acc(BMI160_IC2_ADDRESS_VDDIO, (REG_INT_EN | 0x01), &data_ready_int, 1)) { // 0x01 OR for selecting second field
+    if (!writeI2C_acc(BMI160_IC2_ADDRESS_VDDIO, (REG_INT_EN | 0x01), &data_ready_int, 1))
+    { // 0x01 OR for selecting second field
         return false;
     }
 
-
     uint8_t val1;
     readI2C(BMI160_IC2_ADDRESS_VDDIO, 0x40, &val1);
-    UARTprintf("ACC_CONF = 0x%02X\n", val1);  // Expect 0x28
+    UARTprintf("ACC_CONF = 0x%02X\n", val1); // Expect 0x28
     readI2C(BMI160_IC2_ADDRESS_VDDIO, 0x41, &val1);
     UARTprintf("ACC_RANGE = 0x%02X\n", val1); // Expect 0x03
     uint8_t pmu;
@@ -171,21 +175,21 @@ bool sensorBMI160Read(uint8_t *rawData)
  **************************************************************************************************/
 bool sensorBMI160Test(void)
 {
-    uint8_t val;
-
     UARTprintf("FINDING CHIP ID:\n");
-    // Check manufacturer ID
-    readI2C(BMI160_IC2_ADDRESS_VDDIO, REG_CHIP_ID, (uint8_t *)&val);
+    uint8_t val = 0;
+    for (int i = 0; i < 10; i++) {
+        readI2C(BMI160_IC2_ADDRESS_VDDIO, REG_CHIP_ID, &val);
+        if (val == CHIP_ID) break;
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
 
-    if (val != CHIP_ID)
-    {
+    if (val != CHIP_ID) {
+        UARTprintf("[!] Chip ID failed: 0x%02X\n", val);
         return false;
     }
 
-    // print Man ID
     UARTprintf("CHIP ID Correct: %d\n", val);
-
-    return (true);
+    return true;
 }
 
 // /**************************************************************************************************

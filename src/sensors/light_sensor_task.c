@@ -132,6 +132,7 @@ tContext sContext;
 static void prvLightSensorTask(void *pvParameters);
 // static void prvDISPTask(void *pvParameters);
 static void SignalSampling(TimerHandle_t timer);
+void xOptIntHandler(void);
 
 /* Handles the timer interrupt and signals when the read/write task is completed */
 void xTimerHandler(void);
@@ -234,7 +235,22 @@ static void prvLightSensorTask(void *pvParameters)
 
 static void SignalSampling(TimerHandle_t timer)
 {
-    xSemaphoreGive(xSampleLightSemaphore);
+    
+}
+
+
+void xOptIntHandler(void) {
+    BaseType_t xOPTTaskWoken = pdFALSE;
+
+    UARTprintf("[OPT]   OPT INT TRIGGERED\n");
+    /* Read the PORT P interrupt status to find the cause of the interrupt. */
+    uint32_t ui32Status = GPIOIntStatus(GPIO_PORTM_BASE, true);
+
+    /* Clear the interrupt. */
+    GPIOIntClear(GPIO_PORTM_BASE, ui32Status);
+    //GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, 0);
+    xSemaphoreGiveFromISR(xSampleLightSemaphore, &xOPTTaskWoken);
+    portYIELD_FROM_ISR(xOPTTaskWoken);
 }
 
 // void xI2CHandler(void)
