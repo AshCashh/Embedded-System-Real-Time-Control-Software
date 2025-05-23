@@ -12,6 +12,9 @@
 #include "FreeRTOS.h"
 #include "driverlib/sysctl.h"
 #include "task.h"
+#include "driverlib/gpio.h"
+#include "inc/hw_memmap.h"
+#include "inc/hw_ints.h"
 
 /* ------------------------------------------------------------------------------------------------
  *                                           Constants
@@ -134,6 +137,14 @@ bool sensorBMI160Init(void)
     { // 0x01 OR for selecting second field
         return false;
     }
+
+    // enable GPIOP interrupt
+    GPIOIntEnable(GPIO_PORTP_BASE, GPIO_PIN_3);
+
+    IntEnable(INT_GPIOP3);
+
+    // enable interrupts
+    IntMasterEnable();
 
     uint8_t val1;
     readI2C(BMI160_IC2_ADDRESS_VDDIO, 0x40, &val1);

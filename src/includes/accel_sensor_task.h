@@ -40,7 +40,7 @@ typedef struct {
 
 // Function declarations
 void vCreateLightSensorTask(void);
-static void prvAccelTask(void *pvParameters);
+void vCreateAccelTask(void);
 
 
 #endif

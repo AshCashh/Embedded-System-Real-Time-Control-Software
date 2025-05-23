@@ -76,6 +76,20 @@
 #include "includes/light_sensor_task.h"
 #include "includes/display_task.h"
 #include "includes/common.h"
+
+
+
+#include "grlib.h"
+#include "widget.h"
+#include "canvas.h"
+#include "checkbox.h"
+#include "container.h"
+#include "pushbutton.h"
+#include "radiobutton.h"
+#include "slider.h"
+#include "utils/ustdlib.h"
+#include "drivers/Kentec320x240x16_ssd2119_spi.h"
+#include "drivers/touch.h"
 /*-----------------------------------------------------------*/
 
 /* The system clock frequency. */
@@ -91,6 +105,8 @@ SemaphoreHandle_t xSampleAccelSemaphore = NULL;
 SemaphoreHandle_t xI2CMutex = NULL;
 extern SemaphoreHandle_t xSemaphoreTimer0;
 
+
+extern tDisplay sContext;
 /* Set up the clock and pin configurations to run this example. */
 static void prvSetupHardware( void );
 
@@ -99,6 +115,7 @@ static void prvSetupHardware( void );
 static void prvConfigureUART(void);
 static void prvConfigureI2C(void); // configures I2C for sensor communication
 static void prvBMI160DataReady(void);
+static void prvDisplayInit(void);
 
 
 QueueHandle_t xStructQueue = NULL; // Define the variable here
@@ -160,9 +177,11 @@ int main( void )
     if ( xButton1Semaphore != NULL && xButton2Semaphore != NULL && xIC2MasterSemaphore != NULL && xSampleLightSemaphore != NULL && xI2CMutex != NULL)
     {
         /* Configure application specific hardware and initialize the task thread. */
+        taskENTER_CRITICAL();
         //vCreateLightSensorTask();
-        //vCreateAccelTask();
         vCreateDisplayTask();
+        //vCreateAccelTask();
+        taskEXIT_CRITICAL();
         UARTprintf("    Tasks Created\n");
     }
     else {
@@ -223,7 +242,6 @@ static void prvBMI160DataReady(void) {
 
     // enable interrupts
     IntMasterEnable();
-    
 }
 
 // config UART
@@ -280,10 +298,10 @@ static void prvConfigureI2C(void) {
 
     I2CMasterInitExpClk(I2C2_BASE, SysCtlClockGet(), false);
 
-    // Enable I2C0 master interrupt generation
+    // Enable I2C2 master interrupt generation
     I2CMasterIntEnable(I2C2_BASE);  // Enables interrupt generation by I2C0 hardware
     
-    // Enable I2C0 interrupt in the NVIC
+    // Enable I2C2 interrupt in the NVIC
     IntEnable(INT_I2C2);
 }
 
@@ -317,6 +335,39 @@ void prvConfigureHWTimer(void)
 }
 /*-----------------------------------------------------------*/
 
+static void prvDisplayInit(void) {
+    //
+    // The FPU should be enabled because some compilers will use floating-
+    // point registers, even for non-floating-point code.  If the FPU is not
+    // enabled this will cause a fault.  This also ensures that floating-
+    // point operations could be added to this application and would work
+    // correctly and use the hardware floating-point unit.  Finally, lazy
+    // stacking is enabled for interrupt handlers.  This allows floating-
+    // point instructions to be used within interrupt handlers, but at the
+    // expense of extra stack usage.
+    //
+    FPUEnable();
+    FPULazyStackingEnable();
+
+    //
+    // Initialize the display driver.
+    //
+    Kentec320x240x16_SSD2119Init(configCPU_CLOCK_HZ);
+
+    //
+    // Initialize the graphics context.
+    //
+    GrContextInit(&sContext, &g_sKentec320x240x16_SSD2119);
+
+    SetStartTime(16, 50, 0, "2025-10-01");
+    //
+    // Initialize the touch screen driver and have it route its messages to the
+    // widget tree.
+    //
+    TouchScreenInit(configCPU_CLOCK_HZ);
+    TouchScreenCallbackSet(WidgetPointerMessage);
+}
+
 static void prvSetupHardware( void )
 {
     /* Run from the PLL at configCPU_CLOCK_HZ MHz. */
@@ -326,6 +377,7 @@ static void prvSetupHardware( void )
 
     /* Configure device pins. */
     PinoutSet(false, false);
+    prvDisplayInit();
     prvConfigureUART();
     prvConfigureI2C();
     prvBMI160DataReady();

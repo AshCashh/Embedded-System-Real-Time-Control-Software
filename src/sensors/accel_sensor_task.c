@@ -197,8 +197,8 @@ static void prvAccelTask(void *pvParameters)
             {
                 UARTprintf("[!] Error Reading\n");
             }
-            // uint32_t currentTick = xTaskGetTickCount();
-            //     sampleCounter++;
+            uint32_t currentTick = xTaskGetTickCount();
+                sampleCounter++;
             // if (sampleCounter >= 100)  // Log every 20 samples (~every 200 ms at 100 Hz)
             // {
             //     if (lastTick != 0) {
@@ -248,7 +248,7 @@ static void prvAccelTask(void *pvParameters)
 
             // Calculate average absolute acceleration
             float avgAbsAccel = (fabs(filteredX) + fabs(filteredY) + fabs(fabs(filteredZ) - 9.81)) / 3.0f;
-            UARTprintf("Acceleration: %d.%d\n", (int)avgAbsAccel,(int)(avgAbsAccel * 100) % 100);
+            //UARTprintf("Acceleration: %d.%d\n", (int)avgAbsAccel,(int)(avgAbsAccel * 100) % 100);
         //     UARTprintf("Filtered Accel: X: %d, Y: %d, Z: %d\n",
         //    (int)(filteredX * 1000),
         //    (int)(filteredY * 1000),

@@ -1068,9 +1068,9 @@ void vCreateDisplayTask(void)
      *  - The task handle is NULL */
     xTaskCreate(prvDisplayTask,
                 "Display Task",
-                configMINIMAL_STACK_SIZE,
+                1024,
                 NULL,
-                tskIDLE_PRIORITY + 2,
+                tskIDLE_PRIORITY+4,
                 NULL);
 }
 /*-----------------------------------------------------------*/
@@ -1078,37 +1078,6 @@ void vCreateDisplayTask(void)
 static void prvDisplayTask(void *pvParameters)
 {
     tRectangle sRect;
-
-    //
-    // The FPU should be enabled because some compilers will use floating-
-    // point registers, even for non-floating-point code.  If the FPU is not
-    // enabled this will cause a fault.  This also ensures that floating-
-    // point operations could be added to this application and would work
-    // correctly and use the hardware floating-point unit.  Finally, lazy
-    // stacking is enabled for interrupt handlers.  This allows floating-
-    // point instructions to be used within interrupt handlers, but at the
-    // expense of extra stack usage.
-    //
-    FPUEnable();
-    FPULazyStackingEnable();
-
-    //
-    // Initialize the display driver.
-    //
-    Kentec320x240x16_SSD2119Init(configCPU_CLOCK_HZ);
-
-    //
-    // Initialize the graphics context.
-    //
-    GrContextInit(&sContext, &g_sKentec320x240x16_SSD2119);
-
-    SetStartTime(16, 50, 0, "2025-10-01");
-    //
-    // Initialize the touch screen driver and have it route its messages to the
-    // widget tree.
-    //
-    TouchScreenInit(configCPU_CLOCK_HZ);
-    TouchScreenCallbackSet(WidgetPointerMessage);
 
     //
     // Add the title block and the previous and next buttons to the widget
