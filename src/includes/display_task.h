@@ -8,4 +8,5 @@
 // Function prototypes
 void vCreateDisplayTask(void);
 void prvConfigureHWTimer(void);
+void xTimerHandler(void);
 #endif // DISPLAY_TASK_H

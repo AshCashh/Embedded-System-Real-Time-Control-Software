@@ -137,6 +137,7 @@ tDMAControlTable psDMAControlTable[64] __attribute__((aligned(1024)));
 void OnPrevious(tWidget *psWidget);
 void OnNext(tWidget *psWidget);
 void OnIntroPaint(tWidget *psWidget, tContext *psContext);
+void OnMotorPanelPaint(tWidget *psWidget, tContext *psContext);
 void OnCanvasPaint(tWidget *psWidget, tContext *psContext);
 void OnCheckChange(tWidget *psWidget, uint32_t bSelected);
 void OnButtonPress(tWidget *psWidget);
@@ -152,6 +153,8 @@ void UpdateTime(void);
 void SetStartTime(uint8_t hours, uint8_t minutes, uint8_t seconds, const char *set_date);
 void intToTwoDigitString(uint8_t num, char *str);
 void UpdateTimeString(uint8_t hours, uint8_t minutes, uint8_t seconds, char *timeStr);
+
+void OnLimitSliderChange(tWidget *psWidget, int32_t i32Value); 
 
 void UpdateTime(void)
 {
@@ -254,7 +257,7 @@ OnRpmChange(tWidget *psWidget, int32_t i32Value)
     static char pcText[5];
 
     // 1) Apply to your motor data
-    Motor.desiredRPM = i32Value;
+    Motor.desired_rpm = i32Value;
 
     // 2) Update the slider label
     usprintf(pcText, "%3d", i32Value);
@@ -267,32 +270,168 @@ OnRpmChange(tWidget *psWidget, int32_t i32Value)
 // When the user drags the RPM slider, update Motor.desiredRPM
 //*****************************************************************************
 //
-// The first panel, which contains introductory text explaining the
+// The second panel, which contains introductory text explaining the
 // application.
 //
 //*****************************************************************************
+// Define sliders for motor limits
+
 
 //*****************************************************************************
 //
-// The second panel, which demonstrates the graphics primitives.
+// The first panel, which demonstrates the graphics primitives.
 //
 //*****************************************************************************
 
 tSliderWidget g_psSliders[] =
     {
-        SliderStruct(g_psPanels + 1, 0, 0,
-                     &g_sKentec320x240x16_SSD2119, 150, 60, 140, 30, 0, 100, 25,
+        SliderStruct(g_psPanels + 1, 0, 0, // parent, next, prev
+                     &g_sKentec320x240x16_SSD2119, 150, 60, 140, 30, 0, 100, 25, // x, y, width, height
                      (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE |
                       SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
                      ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
                      &g_sFontCm20, "25%", 0, 0, OnSliderChange),
 };
 
+
+tSliderWidget g_psLimitSliders[] = {
+    // Current Lower Limit
+    SliderStruct(g_psPanels + 1, &g_psLimitSliders[1], 0, &g_sKentec320x240x16_SSD2119,
+        20, 45, 280, 30, 0, 100, 10, // x, y, width, height
+        (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
+        ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
+        &g_sFontCm20, "10 A", 0, 0, OnLimitSliderChange),
+    // Current Upper Limit
+    SliderStruct(g_psPanels + 1, &g_psLimitSliders[2], 0, &g_sKentec320x240x16_SSD2119,
+        20, 75, 280, 30, 0, 100, 50,
+        (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
+        ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
+        &g_sFontCm20, "50 A", 0, 0, OnLimitSliderChange),
+    // Acceleration Lower Limit
+    SliderStruct(g_psPanels + 1, &g_psLimitSliders[3], 0, &g_sKentec320x240x16_SSD2119,
+        20, 130, 280, 30, 0, 20, 5,
+        (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
+        ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
+        &g_sFontCm20, "5 g", 0, 0, OnLimitSliderChange),
+    // Acceleration Upper Limit
+    SliderStruct(g_psPanels + 1, 0, 0, &g_sKentec320x240x16_SSD2119,
+        20, 160, 280, 30, 0, 20, 15,
+        (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
+        ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
+        &g_sFontCm20, "15 g", 0, 0, OnLimitSliderChange),
+};
+
+tCanvasWidget g_sLimitSlidersCanvas = CanvasStruct(
+    g_psPanels + 1, // parent
+    0,              // next
+    &g_psLimitSliders[0], // child: first slider
+    &g_sKentec320x240x16_SSD2119,
+    0, 0,           // x, y
+    320, 190,       // width, height
+    CANVAS_STYLE_FILL | CANVAS_STYLE_APP_DRAWN, // style
+    ClrBlack,       // fill color
+    0,              // outline color
+    0,              // text color
+    &g_sFontCm20,   // font
+    0,              // text
+    0,              // image
+    OnMotorPanelPaint // paint callback
+);
+
+void OnLimitSliderChange(tWidget *psWidget, int32_t i32Value)
+{
+    static char pcText[8];
+
+    if (psWidget == (tWidget *)&g_psLimitSliders[0]) {
+        Motor.current_limit.lower = i32Value;
+        usprintf(pcText, "Min: %d A", i32Value);
+        SliderTextSet(&g_psLimitSliders[0], pcText);
+    } else if (psWidget == (tWidget *)&g_psLimitSliders[1]) {
+        Motor.current_limit.upper = i32Value;
+        usprintf(pcText, "Max: %d A", i32Value);
+        SliderTextSet(&g_psLimitSliders[1], pcText);
+    } else if (psWidget == (tWidget *)&g_psLimitSliders[2]) {
+        Motor.acceleration_limit.lower = i32Value;
+        usprintf(pcText, "Min: %d g", i32Value);
+        SliderTextSet(&g_psLimitSliders[2], pcText);
+    } else if (psWidget == (tWidget *)&g_psLimitSliders[3]) {
+        Motor.acceleration_limit.upper = i32Value;
+        usprintf(pcText, "Max: %d g", i32Value);
+        SliderTextSet(&g_psLimitSliders[3], pcText);
+    }
+    WidgetPaint(psWidget);
+}
 #define SLIDER_TEXT_VAL_INDEX 0
 #define SLIDER_LOCKED_INDEX 2
 #define SLIDER_CANVAS_VAL_INDEX 4
 
 #define NUM_SLIDERS (sizeof(g_psSliders) / sizeof(g_psSliders[0]))
+
+
+// Forward declarations for button handlers
+void OnPlotSelectButton(tWidget *psWidget);
+// Forward declarations for plot select buttons
+extern tPushButtonWidget g_sPlotBtnAccel;
+extern tPushButtonWidget g_sPlotBtnRPM;
+extern tPushButtonWidget g_sPlotBtnPower;
+
+// Now define the buttons in order
+tPushButtonWidget g_sPlotBtnLight = RectangularButtonStruct(
+    g_psPanels + 2, &g_sPlotBtnAccel, 0, &g_sKentec320x240x16_SSD2119,
+    10, 5, 70, 28,
+    PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT,
+    ClrGray, ClrSilver, ClrWhite, ClrBlack,
+    &g_sFontCm18, "Light", 0, 0, 0, 0,
+    OnPlotSelectButton);
+
+tPushButtonWidget g_sPlotBtnAccel = RectangularButtonStruct(
+    g_psPanels + 2, &g_sPlotBtnRPM, 0, &g_sKentec320x240x16_SSD2119,
+    90, 5, 90, 28,
+    PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT,
+    ClrGray, ClrSilver, ClrWhite, ClrBlack,
+    &g_sFontCm18, "Acceleration", 0, 0, 0, 0,
+    OnPlotSelectButton);
+
+tPushButtonWidget g_sPlotBtnRPM = RectangularButtonStruct(
+    g_psPanels + 2, &g_sPlotBtnPower, 0, &g_sKentec320x240x16_SSD2119,
+    190, 5, 60, 28,
+    PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT,
+    ClrGray, ClrSilver, ClrWhite, ClrBlack,
+    &g_sFontCm18, "RPM", 0, 0, 0, 0,
+    OnPlotSelectButton);
+
+tPushButtonWidget g_sPlotBtnPower = RectangularButtonStruct(
+    g_psPanels + 2, 0, 0, &g_sKentec320x240x16_SSD2119,
+    260, 5, 50, 28,
+    PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT,
+    ClrGray, ClrSilver, ClrWhite, ClrBlack,
+    &g_sFontCm18, "Power", 0, 0, 0, 0,
+    OnPlotSelectButton);
+             
+tCanvasWidget g_sSensorPanelCanvas = CanvasStruct(
+    g_psPanels + 2, // parent
+    0,              // next
+    &g_sPlotBtnLight, // child: first plot select button
+    &g_sKentec320x240x16_SSD2119,
+    0, 0,           // x, y
+    320, 190,       // width, height
+    CANVAS_STYLE_FILL, // style
+    ClrBlack, 0, 0, 0, 0, 0, 0
+);
+// Implement the button handler
+void OnPlotSelectButton(tWidget *psWidget)
+{
+    // Set a global variable to indicate which plot to show
+    if (psWidget == (tWidget *)&g_sPlotBtnLight) {
+        // Show Light plot
+    } else if (psWidget == (tWidget *)&g_sPlotBtnAccel) {
+        // Show Acceleration plot
+    } else if (psWidget == (tWidget *)&g_sPlotBtnRPM) {
+        // Show RPM plot
+    } else if (psWidget == (tWidget *)&g_sPlotBtnPower) {
+        // Show Motor Power plot
+    }
+}
 
 tCanvasWidget g_psCheckBoxIndicators[] =
     {
@@ -351,7 +490,7 @@ tPushButtonWidget g_sStartButton = RectangularButtonStruct(
 tSliderWidget g_psRpmSlider[] = {
     SliderStruct(
         g_psPanels, &g_sStartButton, 0, &g_sKentec320x240x16_SSD2119,
-        70, 65 - 15, 170, 30,
+        70, 65 - 15, 200, 30,
         0, 2500, 0,
         (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE |
          SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
@@ -393,13 +532,16 @@ Canvas(g_sCanvas1, g_psPanels + 2, &g_sCanvas3, 0,
 //
 //*****************************************************************************
 tCanvasWidget g_psPanels[] =
-    {
-        CanvasStruct(0, 0, &g_sDashboard, &g_sKentec320x240x16_SSD2119, 0, 0,
-                     320, 190, CANVAS_STYLE_FILL, ClrBlack, 0, 0, 0, 0, 0, 0),
-        CanvasStruct(0, 0, &g_psPushButtons, &g_sKentec320x240x16_SSD2119, 0, 0,
-                     320, 190, CANVAS_STYLE_FILL, ClrBlack, 0, 0, 0, 0, 0, 0),
-        CanvasStruct(0, 0, &g_sCanvas1, &g_sKentec320x240x16_SSD2119, 0, 0, 320,
-                     190, CANVAS_STYLE_FILL, ClrBlack, 0, 0, 0, 0, 0, 0),
+{
+    // Dashboard panel
+    CanvasStruct(0, 0, &g_sDashboard, &g_sKentec320x240x16_SSD2119, 0, 0,
+                 320, 190, CANVAS_STYLE_FILL, ClrBlack, 0, 0, 0, 0, 0, 0),
+    // Motor Control panel (second panel)
+    CanvasStruct(0, 0, &g_sLimitSlidersCanvas, &g_sKentec320x240x16_SSD2119, 0, 0,
+                 320, 190, CANVAS_STYLE_FILL, ClrBlack, 0, 0, 0, 0, 0, 0),
+    // Sensor Graphs panel
+    CanvasStruct(0, 0, &g_sSensorPanelCanvas, &g_sKentec320x240x16_SSD2119, 0, 0, 320,
+                 190, CANVAS_STYLE_FILL, ClrBlack, 0, 0, 0, 0, 0, 0),
 };
 
 //*****************************************************************************
@@ -440,6 +582,8 @@ RectangularButton(g_sNext, 0, 0, 0, &g_sKentec320x240x16_SSD2119, 275, 195,
                   40, 40, PB_STYLE_IMG | PB_STYLE_TEXT, ClrBlack, ClrBlack, 0,
                   ClrSilver, &g_sFontCm20, "+", g_pui8Blue50x50,
                   g_pui8Blue50x50Press, 0, 0, OnNext);
+
+
 
 //*****************************************************************************
 //
@@ -595,14 +739,14 @@ void OnIntroPaint(tWidget *psWidget, tContext *psContext)
 {
     tRectangle sRect;
     const char *pcState;
-    // Clear the status area first (adjust rectangle as needed)
+    // Clear the status area first
     sRect.i16XMin = 130;
     sRect.i16YMin = 0 - 15;
     sRect.i16XMax = 220;
     sRect.i16YMax = 60 - 15; // Covers the status and LED area
     GrContextForegroundSet(psContext, ClrBlack);
     GrRectFill(psContext, &sRect);
-    // 1) Draw the “LED” box
+    // LED
     sRect.i16XMin = 10;
     sRect.i16YMin = 10 - 15;
     sRect.i16XMax = 30;
@@ -695,7 +839,30 @@ void OnIntroPaint(tWidget *psWidget, tContext *psContext)
     GrContextForegroundSet(psContext, ClrWhite);
     GrStringDraw(psContext, "27/05/25", -1, 20, 170, false);
 }
-
+void OnMotorPanelPaint(tWidget *psWidget, tContext *psContext)
+{
+    GrContextFontSet(psContext, &g_sFontCm20);
+    GrContextForegroundSet(psContext, ClrWhite);
+    // draw a Threshold Parameter label
+    // Center "Threshold Parameters" at the top of the panel
+    GrStringDrawCentered(psContext, "Threshold Parameters", -1, 160, 10, false);
+    // Draw labels for each slider
+    GrContextFontSet(psContext, &g_sFontCm16);
+    GrContextForegroundSet(psContext, ClrGray);
+    GrStringDraw(psContext, "Current Upper/Lower", -1, 10, 25, false);
+    // Add a border box around the text and sliders
+    // tRectangle sRect;
+    // sRect.i16XMin = 10;
+    // sRect.i16YMin = 10;
+    // sRect.i16XMax = 310;
+    // sRect.i16YMax = 190;
+    // GrContextForegroundSet(psContext, ClrGray);
+    // GrRectDraw(psContext, &sRect);
+    GrStringDraw(psContext, "Acceleration Upper/Lower", -1, 10, 110, false);
+    // GrStringDraw(psContext, "Current Upper", -1, 10, 70, false);
+    // GrStringDraw(psContext, "Accel Lower", -1, 10, 110, false);
+    // GrStringDraw(psContext, "Accel Upper", -1, 10, 150, false);
+}
 //*****************************************************************************
 //
 // Handles paint requests for the canvas demonstration widget.
@@ -973,7 +1140,7 @@ static void prvDisplayTask(void *pvParameters)
         //
         WidgetMessageQueueProcess();
         // block until ISR gives semaphore
-        if (xSemaphoreTake(xSemaphoreTimer0, portMAX_DELAY) == pdTRUE)
+        if (xSemaphoreTake(xSemaphoreTimer0, 0) == pdTRUE)
         {
             if (g_ui32Panel == 0)
             {
