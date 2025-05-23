@@ -159,7 +159,7 @@ void vCreateAccelTask(void)
                 "Accel Task",
                 configMINIMAL_STACK_SIZE,
                 NULL,
-                tskIDLE_PRIORITY,
+                tskIDLE_PRIORITY+1,
                 NULL);
 }
 

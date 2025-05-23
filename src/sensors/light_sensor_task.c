@@ -148,11 +148,11 @@ void vCreateLightSensorTask(void)
                 "Light Sensor Sensing",
                 configMINIMAL_STACK_SIZE,
                 NULL,
-                tskIDLE_PRIORITY,
+                tskIDLE_PRIORITY+1,
                 NULL);
     TimerHandle_t timer = xTimerCreate(
         "Light Sensor Sensing",
-        pdMS_TO_TICKS(100),
+        pdMS_TO_TICKS(1),
         pdTRUE,
         0,
         SignalSampling);

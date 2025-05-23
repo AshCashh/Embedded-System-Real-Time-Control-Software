@@ -152,28 +152,18 @@ int main( void )
     xIC2MasterSemaphore = xSemaphoreCreateBinary();
     xSampleLightSemaphore = xSemaphoreCreateBinary();
     xSampleAccelSemaphore = xSemaphoreCreateBinary();
-    xI2CMutex = xSemaphoreCreateMutex();
     xSemaphoreTimer0 = xSemaphoreCreateBinary();
+    xI2CMutex = xSemaphoreCreateMutex();
 
 
 
     if ( xButton1Semaphore != NULL && xButton2Semaphore != NULL && xIC2MasterSemaphore != NULL && xSampleLightSemaphore != NULL && xI2CMutex != NULL)
     {
         /* Configure application specific hardware and initialize the task thread. */
-        vCreateLightSensorTask();
-        UARTprintf("Creating Tasks...\n");
-        vCreateAccelTask();
-
-        //vCreateDisplayTask();
-
-        /* Start the tasks. */
-        vTaskStartScheduler();
-        UARTprintf("    Tasks Created\n");
-      
-          
-
-        /* Create the Hello task to output a message over UART. */
+        //vCreateLightSensorTask();
+        //vCreateAccelTask();
         vCreateDisplayTask();
+        UARTprintf("    Tasks Created\n");
     }
     else {
         UARTprintf("Semaphore creation failed\n");
@@ -297,23 +287,24 @@ static void prvConfigureI2C(void) {
     IntEnable(INT_I2C2);
 }
 
-static void prvConfigureHWTimer(void)
+void prvConfigureHWTimer(void)
 {
     /* The Timer 0 peripheral must be enabled for use. */
     SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER0);
 
     /* Configure Timer 0 in full-width periodic mode. */
     TimerConfigure(TIMER0_BASE, TIMER_CFG_PERIODIC);
+    TimerClockSourceSet(TIMER0_BASE, TIMER_CLOCK_SYSTEM);
 
     /* Set the Timer 0A load value to run at 10 Hz. */
-    TimerLoadSet(TIMER0_BASE, TIMER_A, g_ui32SysClock / 10);
+    TimerLoadSet(TIMER0_BASE, TIMER_A, g_ui32SysClock);
 
     /* Configure the Timer 0A interrupt for timeout. */
-    TimerIntEnable(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
-
+    TimerIntRegister(TIMER0_BASE, TIMER_A, xTimerHandler);
 
     /* Enable the Timer 0A interrupt in the NVIC. */
     IntEnable(INT_TIMER0A);
+    TimerIntEnable(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
 
     /* Enable global interrupts in the NVIC. */
     IntMasterEnable();
@@ -324,7 +315,7 @@ static void prvConfigureHWTimer(void)
     //
     TimerEnable(TIMER0_BASE, TIMER_A);
 }
-
+/*-----------------------------------------------------------*/
 
 static void prvSetupHardware( void )
 {
