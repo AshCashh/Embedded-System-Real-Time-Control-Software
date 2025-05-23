@@ -115,6 +115,7 @@
 #include "includes/display_task.h"
 #include "includes/button_task.h"
 #include "drivers/bmi160.h"
+#include <math.h>
 
 /*-----------------------------------------------------------*/
 /*
@@ -128,7 +129,7 @@ extern uint32_t g_ui32SysClock;
 
 tContext sContext;
 // Moving average filter variables
-#define FILTER_SIZE 10
+#define FILTER_SIZE 4
 static float filterBufferX[FILTER_SIZE] = {0};
 static float filterBufferY[FILTER_SIZE] = {0};
 static float filterBufferZ[FILTER_SIZE] = {0};
@@ -211,33 +212,40 @@ static void prvAccelTask(void *pvParameters)
             int16_t acc_z = (int16_t)((rawData[5] << 8) | rawData[4]);
 
 
-            UARTprintf("X: %d, Y: %d, X: %d\n", acc_x, acc_y, acc_z);
+            //UARTprintf("X: %d, Y: %d, X: %d\n", acc_x, acc_y, acc_z);
             // float accelX = acc_x / 16384.0f; // Convert to g
             // float accelY = acc_y / 16384.0f; // Convert to g
             // float accelZ = acc_z / 16384.0f; // Convert to g
+            float accelX = acc_x / 16384.0f * 9.80665; // Convert to SI m/s
+            float accelY = acc_y / 16384.0f * 9.80665; // Convert to SI m/s
+            float accelZ = (acc_z / 16384.0f * 9.80665); // Convert to SI m/s and cancel out gravity
 
-            // // Update moving average filters
-            // filterSumX -= filterBufferX[filterIndex];
-            // filterSumY -= filterBufferY[filterIndex];
-            // filterSumZ -= filterBufferZ[filterIndex];
+            // Update moving average filters
+            filterSumX -= filterBufferX[filterIndex];
+            filterSumY -= filterBufferY[filterIndex];
+            filterSumZ -= filterBufferZ[filterIndex];
 
-            // filterBufferX[filterIndex] = accelX;
-            // filterBufferY[filterIndex] = accelY;
-            // filterBufferZ[filterIndex] = accelZ;
+            filterBufferX[filterIndex] = accelX;
+            filterBufferY[filterIndex] = accelY;
+            filterBufferZ[filterIndex] = accelZ;
 
-            // filterSumX += accelX;
-            // filterSumY += accelY;
-            // filterSumZ += accelZ;
+            filterSumX += accelX;
+            filterSumY += accelY;
+            filterSumZ += accelZ;
 
-            // filterIndex = (filterIndex + 1) % FILTER_SIZE;
+            filterIndex = (filterIndex + 1) % FILTER_SIZE;
 
-            // float filteredX = filterSumX / FILTER_SIZE;
-            // float filteredY = filterSumY / FILTER_SIZE;
-            // float filteredZ = filterSumZ / FILTER_SIZE;
+            float filteredX = filterSumX / FILTER_SIZE;
+            float filteredY = filterSumY / FILTER_SIZE;
+            float filteredZ = filterSumZ / FILTER_SIZE;
 
-            // // Calculate average absolute acceleration
-            // float avgAbsAccel = (fabs(filteredX) + fabs(filteredY) + fabs(filteredZ)) / 3.0f;
-            // UARTprintf("Filtered Accel: X: %.2f, Y: %.2f, Z: %.2f\n", filteredX, filteredY, filteredZ);
+            // Calculate average absolute acceleration
+            float avgAbsAccel = (fabs(filteredX) + fabs(filteredY) + fabs(filteredZ) - 9.81) / 3.0f;
+            UARTprintf("Acceleration: %d.%d\n", (int)avgAbsAccel,(int)(avgAbsAccel * 100) % 100);
+        //     UARTprintf("Filtered Accel: X: %d, Y: %d, Z: %d\n",
+        //    (int)(filteredX * 1000),
+        //    (int)(filteredY * 1000),
+        //    (int)(filteredZ * 1000));
         }
     }
 }

@@ -221,7 +221,7 @@ static void prvLightSensorTask(void *pvParameters)
                 xMessage.uRaw = convertedLux;
                 if (xQueueSend(xStructQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
                 {
-                    // UARTprintf("Data sent to queue: %d\n", (int)convertedLux);
+                    UARTprintf("Data sent to queue: %d\n", (int)convertedLux);
                 }
                 else
                 {

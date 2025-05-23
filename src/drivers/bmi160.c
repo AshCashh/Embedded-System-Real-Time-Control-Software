@@ -75,14 +75,8 @@ bool sensorBMI160Init(void)
     }
     vTaskDelay(pdMS_TO_TICKS(100));
 
-
-    // Disable Advanced Power Save
-    val = 0x00;
-    if (!writeI2C_acc(BMI160_IC2_ADDRESS_VDDIO, 0x6C, &val, 1)) return false;
-    vTaskDelay(pdMS_TO_TICKS(100));
-
     // enable accelerometer
-    // 2. Repeatedly attempt to set accel to normal mode
+    // Repeatedly attempt to set accel to normal mode (it wont wake up sometimes)
     uint8_t pwd = 0x00;
     while (pwd == 0x00) {
         val = 0x11;
@@ -91,7 +85,7 @@ bool sensorBMI160Init(void)
 
         readI2C(BMI160_IC2_ADDRESS_VDDIO, 0x03, &val); // PMU_STATUS
         if ((val & 0x30) == 0x10) {
-            UARTprintf("[✓] Accel in Normal Mode\n");
+            UARTprintf("[W] Accel in Normal Mode\n");
             break;
         }
 
@@ -106,10 +100,10 @@ bool sensorBMI160Init(void)
     vTaskDelay(pdMS_TO_TICKS(10));
     // config accelerometer
     // This is actually done via ACC_CONF (0x40) and ACC_RANGE (0x41)
-    // val = 0x28; // 0x08 << 4 | 0x03 -> ODR 100Hz, ±2g
-    // if (!writeI2C(BMI160_IC2_ADDRESS_VDDIO, REG_ACC_CONF, &val)) {
-    //     return false;
-    // }
+    val = 0x28; // 0x08 << 4 | 0x03 -> ODR 100Hz, ±2g
+    if (!writeI2C(BMI160_IC2_ADDRESS_VDDIO, REG_ACC_CONF, &val)) {
+        return false;
+    }
 
     uint8_t val1;
     readI2C(BMI160_IC2_ADDRESS_VDDIO, 0x40, &val1);
@@ -121,9 +115,6 @@ bool sensorBMI160Init(void)
     UARTprintf("PMU_STATUS = 0x%02X\n", pmu);
 
     return true;
-
-    // interrupt fires when data is ready to collect
-    
 }
 
 /**************************************************************************************************
