@@ -115,6 +115,7 @@ static void prvSetupHardware( void );
 /* This function sets up UART0 to be used for a console to display information */
 static void prvConfigureUART(void);
 static void prvConfigureI2C(void); // configures I2C for sensor communication
+static void prvBMI160DataReady(void);
 
 QueueHandle_t xStructQueue = NULL; // Define the variable here
 /*
@@ -196,7 +197,50 @@ int main( void )
 }
 /*-----------------------------------------------------------*/
 
+// // SMBus Interrupt for PORT P Pin 2 (OPT_INT)
+// static void prvConfigSMBusINT(void) {
 
+//     // Enable GPIO port for the INT pin
+//     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOP);
+
+//     // Configure pull-up resistor?
+//     GPIOPinTypeGPIOInput(GPIO_PORTP_BASE, GPIO_PIN_2);
+//     GPIOPadConfigSet(GPIO_PORTP_BASE, GPIO_PIN_2, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+
+//     // trigger on the falling edge
+//     GPIOIntTypeSet(GPIO_PORTP_BASE, GPIO_PIN_2, GPIO_FALLING_EDGE);
+
+//     // enable GPIOP interrupt
+//     GPIOIntEnable(GPIO_PORTP_BASE, GPIO_PIN_2);
+
+//     IntEnable(INT_GPIOP2);
+
+//     // enable interrupts
+//     IntMasterEnable();
+// }
+
+
+// config BMI160 data ready interrupt on Port P Pin 3
+static void prvBMI160DataReady(void) {
+    // Enable GPIO port for the INT pin
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOP);
+
+    // Configure pull-up resistor?
+    GPIOPinTypeGPIOInput(GPIO_PORTP_BASE, GPIO_PIN_3);
+    GPIOPadConfigSet(GPIO_PORTP_BASE, GPIO_PIN_3, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+
+    // trigger on the falling edge
+    GPIOIntTypeSet(GPIO_PORTP_BASE, GPIO_PIN_3, GPIO_FALLING_EDGE);
+    GPIOIntClear(GPIO_PORTP_BASE, GPIO_PIN_3);
+    // enable GPIOP interrupt
+    GPIOIntEnable(GPIO_PORTP_BASE, GPIO_PIN_3);
+
+    IntEnable(INT_GPIOP3);
+
+    // enable interrupts
+    IntMasterEnable();
+    
+}
 
 // config UART
 static void prvConfigureUART(void)
@@ -298,6 +342,7 @@ static void prvSetupHardware( void )
     PinoutSet(false, false);
     prvConfigureUART();
     prvConfigureI2C();
+    prvBMI160DataReady();
     //prvConfigureHWTimer();
 }
 /*-----------------------------------------------------------*/

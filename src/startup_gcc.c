@@ -46,6 +46,7 @@ extern void vPortSVCHandler(void);
 extern void xPortSysTickHandler(void);
 extern void xButtonsHandler(void);
 extern void xI2CHandler(void);
+extern void xBMI160DataReadyHandler(void);
 
 //*****************************************************************************
 //
@@ -166,7 +167,7 @@ void (* const g_pfnVectors[])(void) =
     IntDefaultHandler,                      // GPIO Port P (Summary or P0)
     IntDefaultHandler,                      // GPIO Port P1
     IntDefaultHandler,                      // GPIO Port P2
-    IntDefaultHandler,                      // GPIO Port P3
+    xBMI160DataReadyHandler,                      // GPIO Port P3
     IntDefaultHandler,                      // GPIO Port P4
     IntDefaultHandler,                      // GPIO Port P5
     IntDefaultHandler,                      // GPIO Port P6

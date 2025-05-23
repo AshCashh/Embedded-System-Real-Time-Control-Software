@@ -147,6 +147,7 @@ static void SignalSampling(TimerHandle_t timer);
 
 /* Handles the timer interrupt and signals when the read/write task is completed */
 void xTimerHandler(void);
+void xBMI160DataReadyHandler(void);
 
 /*-----------------------------------------------------------*/
 
@@ -240,7 +241,7 @@ static void prvAccelTask(void *pvParameters)
             float filteredZ = filterSumZ / FILTER_SIZE;
 
             // Calculate average absolute acceleration
-            float avgAbsAccel = (fabs(filteredX) + fabs(filteredY) + fabs(filteredZ) - 9.81) / 3.0f;
+            float avgAbsAccel = (fabs(filteredX) + fabs(filteredY) + fabs(fabs(filteredZ) - 9.81)) / 3.0f;
             UARTprintf("Acceleration: %d.%d\n", (int)avgAbsAccel,(int)(avgAbsAccel * 100) % 100);
         //     UARTprintf("Filtered Accel: X: %d, Y: %d, Z: %d\n",
         //    (int)(filteredX * 1000),
@@ -252,14 +253,14 @@ static void prvAccelTask(void *pvParameters)
 
 static void SignalSampling(TimerHandle_t timer)
 {
-    xSemaphoreGive(xSampleAccelSemaphore);
+
 }
 
 void xI2CHandler(void)
 {
     BaseType_t xSignalTaskWoken = pdFALSE;
 
-    // Clear interrupt
+    // Clear interrupts
     I2CMasterIntClear(I2C2_BASE);
 
     // Only give the semaphore when the I2C bus is idle (transfer finished)
@@ -268,4 +269,9 @@ void xI2CHandler(void)
         xSemaphoreGiveFromISR(xIC2MasterSemaphore, &xSignalTaskWoken);
         portYIELD_FROM_ISR(xSignalTaskWoken);
     }
+}
+
+void xBMI160DataReadyHandler(void) {
+    GPIOIntClear(GPIO_PORTP_BASE, GPIO_PIN_3);
+    xSemaphoreGive(xSampleAccelSemaphore);
 }
