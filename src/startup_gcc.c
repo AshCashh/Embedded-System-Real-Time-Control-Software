@@ -25,6 +25,7 @@
 #include <stdint.h>
 #include "inc/hw_nvic.h"
 #include "inc/hw_types.h"
+#include "includes/display_task.h"
 
 //*****************************************************************************
 //
@@ -48,6 +49,7 @@ extern void xButtonsHandler(void);
 extern void xI2CHandler(void);
 extern void xBMI160DataReadyHandler(void);
 extern void xOptIntHandler(void);
+extern void TouchScreenIntHandler(void);
 
 //*****************************************************************************
 //
@@ -106,9 +108,9 @@ void (* const g_pfnVectors[])(void) =
     IntDefaultHandler,                      // ADC Sequence 0
     IntDefaultHandler,                      // ADC Sequence 1
     IntDefaultHandler,                      // ADC Sequence 2
-    IntDefaultHandler,                      // ADC Sequence 3
+    TouchScreenIntHandler,                      // ADC Sequence 3
     IntDefaultHandler,                      // Watchdog timer
-    IntDefaultHandler,                      // Timer 0 subtimer A
+    xTimerHandler,                      // Timer 0 subtimer A
     IntDefaultHandler,                      // Timer 0 subtimer B
     IntDefaultHandler,                      // Timer 1 subtimer A
     IntDefaultHandler,                      // Timer 1 subtimer B

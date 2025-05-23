@@ -1,5 +1,4 @@
 /*
- * semaphore_example
  *
  * Copyright (C) 2022 Texas Instruments Incorporated
  * 
@@ -36,31 +35,6 @@
 
 /******************************************************************************
  *
- * This project provides a simple demonstration on how to control GPIO as both
- * inputs and outputs and how to use a binary semaphore to defer ISR processing
- * to an individual task to keep the ISR processing very light.  The four LEDs
- * on the EK-TM4C1294XL are configured with the standard PinoutSet() function.
- * The buttons are used to control which LED is on.  The default is LED D1.
- * Pressing SW1 moves the lit LED down by one and pressing SW2 moves it up by
- * one.  Both switches will wrap around.
- *
- * main() creates one binary semaphore and one task.  It then starts the
- * scheduler.
- *
- * The binary semaphore is used to keep the LED task in a blocked state until
- * an interrupt fires from a switch input.
- *
- * The LED task configures the buttons, initializes the LEDs, and starts the
- * task which will handle the processing for the input switches to toggle the
- * LEDs.
- *
- * This example uses UARTprintf for output of UART messages.  UARTprintf is not
- * a thread-safe API and is only being used for simplicity of the demonstration
- * and in a controlled manner.
- *
- * Open a terminal with 115,200 8-N-1 to see the output for this demo.
- *
- */
 
 /* Standard includes. */
 #include <stdio.h>
@@ -73,9 +47,15 @@
 #include "task.h"
 #include "semphr.h"
 
+#include "semphr.h"
 /* Hardware includes. */
 #include "inc/hw_ints.h"
 #include "inc/hw_memmap.h"
+#include "inc/hw_memmap.h"
+#include "inc/hw_sysctl.h"
+#include "driverlib/interrupt.h"
+#include "inc/hw_ints.h"
+#include "driverlib/timer.h"
 #include "driverlib/gpio.h"
 #include "driverlib/pin_map.h"
 #include "inc/hw_sysctl.h"
@@ -90,6 +70,7 @@
 #include "utils/uartstdio.h"
 #include "driverlib/i2c.h"
 #include "drivers/opt3001.h"
+#include "includes/display_task.h"
 
 #include "includes/accel_sensor_task.h"
 #include "includes/light_sensor_task.h"
@@ -108,7 +89,7 @@ SemaphoreHandle_t xIC2MasterSemaphore = NULL;
 SemaphoreHandle_t xSampleLightSemaphore = NULL;
 SemaphoreHandle_t xSampleAccelSemaphore = NULL;
 SemaphoreHandle_t xI2CMutex = NULL;
-
+extern SemaphoreHandle_t xSemaphoreTimer0;
 
 /* Set up the clock and pin configurations to run this example. */
 static void prvSetupHardware( void );
@@ -118,6 +99,7 @@ static void prvSetupHardware( void );
 static void prvConfigureUART(void);
 static void prvConfigureI2C(void); // configures I2C for sensor communication
 static void prvBMI160DataReady(void);
+
 
 QueueHandle_t xStructQueue = NULL; // Define the variable here
 /*
@@ -171,6 +153,7 @@ int main( void )
     xSampleLightSemaphore = xSemaphoreCreateBinary();
     xSampleAccelSemaphore = xSemaphoreCreateBinary();
     xI2CMutex = xSemaphoreCreateMutex();
+    xSemaphoreTimer0 = xSemaphoreCreateBinary();
 
 
 
@@ -186,10 +169,18 @@ int main( void )
         /* Start the tasks. */
         vTaskStartScheduler();
         UARTprintf("    Tasks Created\n");
+      
+          
+
+        /* Create the Hello task to output a message over UART. */
+        vCreateDisplayTask();
     }
     else {
         UARTprintf("Semaphore creation failed\n");
     }
+
+    /* Start the tasks and timer running. */
+    vTaskStartScheduler();
 
     /* If all is well, the scheduler will now be running, and the following
     line will never be reached.  If the following line does execute, then
@@ -334,6 +325,7 @@ static void prvConfigureHWTimer(void)
     TimerEnable(TIMER0_BASE, TIMER_A);
 }
 
+
 static void prvSetupHardware( void )
 {
     /* Run from the PLL at configCPU_CLOCK_HZ MHz. */
@@ -348,6 +340,7 @@ static void prvSetupHardware( void )
     prvBMI160DataReady();
     // prvConfigSMBusINT();
     //prvConfigureHWTimer();
+    prvConfigureHWTimer(); // timer 0 A
 }
 /*-----------------------------------------------------------*/
 
