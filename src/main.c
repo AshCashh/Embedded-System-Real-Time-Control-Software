@@ -178,9 +178,9 @@ int main( void )
     {
         /* Configure application specific hardware and initialize the task thread. */
         taskENTER_CRITICAL();
-        //vCreateLightSensorTask();
+        vCreateLightSensorTask();
         vCreateDisplayTask();
-        //vCreateAccelTask();
+        vCreateAccelTask();
         taskEXIT_CRITICAL();
         UARTprintf("    Tasks Created\n");
     }
@@ -226,19 +226,19 @@ static void prvConfigSMBusINT(void) {
 // config BMI160 data ready interrupt on Port P Pin 3
 static void prvBMI160DataReady(void) {
     // Enable GPIO port for the INT pin
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOP);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOD);
 
     // Configure pull-up resistor?
-    GPIOPinTypeGPIOInput(GPIO_PORTP_BASE, GPIO_PIN_3);
-    GPIOPadConfigSet(GPIO_PORTP_BASE, GPIO_PIN_3, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+    GPIOPinTypeGPIOInput(GPIO_PORTD_BASE, GPIO_PIN_4);
+    GPIOPadConfigSet(GPIO_PORTD_BASE, GPIO_PIN_4, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
 
     // trigger on the falling edge
-    GPIOIntTypeSet(GPIO_PORTP_BASE, GPIO_PIN_3, GPIO_FALLING_EDGE);
-    GPIOIntClear(GPIO_PORTP_BASE, GPIO_PIN_3);
+    GPIOIntTypeSet(GPIO_PORTD_BASE, GPIO_PIN_4, GPIO_FALLING_EDGE);
+    GPIOIntClear(GPIO_PORTD_BASE, GPIO_PIN_4);
     // enable GPIOP interrupt
-    GPIOIntEnable(GPIO_PORTP_BASE, GPIO_PIN_3);
+    GPIOIntEnable(GPIO_PORTD_BASE, GPIO_PIN_4);
 
-    IntEnable(INT_GPIOP3);
+    IntEnable(INT_GPIOD);
 
     // enable interrupts
     IntMasterEnable();
@@ -254,7 +254,7 @@ static void prvConfigureUART(void)
     /* Configure the pin muxing for UART0 functions on port A0 and A1.
      * This step is not necessary if your part does not support pin muxing.
      * TODO: change this to select the port/pin you are using. */
-    GPIOPinConfigure(GPIO_PA0_U0RX);
+    // GPIOPinConfigure(GPIO_PA0_U0RX);
     GPIOPinConfigure(GPIO_PA1_U0TX);
 
     /* Enable UART0 so that we can configure the clock. */
@@ -265,7 +265,7 @@ static void prvConfigureUART(void)
 
     /* Select the alternate (UART) function for these pins.
      * TODO: change this to select the port/pin you are using. */
-    GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_0 | GPIO_PIN_1);
+    GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_1);
 
     /* Initialize the UART for console I/O. */
     UARTStdioConfig(0, 9600, 16000000);

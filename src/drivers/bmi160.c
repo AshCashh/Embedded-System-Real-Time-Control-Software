@@ -114,8 +114,8 @@ bool sensorBMI160Init(void)
     }
 
     /* ------ Set up Interrupts on chip ------ */
-    // map data ready interrupt to INT2
-    uint8_t int1_en_dr = (1 << 3); // enable data ready interrupt 
+    // map data ready interrupt to INT1
+    uint8_t int1_en_dr = (1 << 7); // enable data ready interrupt 
     if (!writeI2C_acc(BMI160_IC2_ADDRESS_VDDIO, REG_DR_INT_MAP, &int1_en_dr, 1))
     {
         return false;
@@ -123,9 +123,9 @@ bool sensorBMI160Init(void)
 
     // Pull up resistor for INT2
     uint8_t int_behaviour =
-        (1 << 7)    // INT2 output enabled
-        | (0 << 6)  // INT2 push-pull/open-drain
-        | (1 << 5); // INT2 active high
+        (1 << 3)    // INT2 output enabled
+        | (0 << 2)  // INT2 push-pull/open-drain
+        | (1 << 1); // INT2 active high
     if (!writeI2C_acc(BMI160_IC2_ADDRESS_VDDIO, REG_IN_OUT_CTRL, &int_behaviour, 1))
     {
         return false;

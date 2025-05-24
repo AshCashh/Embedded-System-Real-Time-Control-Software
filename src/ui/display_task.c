@@ -1126,7 +1126,7 @@ static void prvDisplayTask(void *pvParameters)
                                      120, 177, 0);
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
 
