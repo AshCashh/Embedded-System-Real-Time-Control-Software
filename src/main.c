@@ -123,6 +123,8 @@ QueueHandle_t xStructQueue = NULL; // Define the variable here
  * Queue used to send and receive pointers to struct AMessage structures.
  */
 QueueHandle_t xPointerQueue = NULL;
+QueueHandle_t xBMIQueue = NULL;
+
 EventGroupHandle_t xEventGroup = NULL;
 /*-----------------------------------------------------------*/
 
@@ -158,6 +160,14 @@ int main( void )
         pointer. */
         sizeof(AMessage));
 
+        /* Create the queue used to send pointers to struct AMessage structures. */
+    xBMIQueue = xQueueCreate(
+        /* The number of items the queue can hold. */
+        mainQUEUE_LENGTH,
+        /* Size of each item is big enough to hold only a
+        pointer. */
+        sizeof(AMessage));
+
     if ((xStructQueue == NULL) || (xPointerQueue == NULL))
     {
     }
@@ -178,7 +188,7 @@ int main( void )
     {
         /* Configure application specific hardware and initialize the task thread. */
         taskENTER_CRITICAL();
-        //vCreateLightSensorTask();
+        vCreateLightSensorTask();
         vCreateDisplayTask();
         vCreateAccelTask();
         taskEXIT_CRITICAL();
@@ -312,7 +322,7 @@ void prvConfigureHWTimer(void)
     TimerClockSourceSet(TIMER0_BASE, TIMER_CLOCK_SYSTEM);
 
     /* Set the Timer 0A load value to run at 10 Hz. */
-    TimerLoadSet(TIMER0_BASE, TIMER_A, g_ui32SysClock);
+    TimerLoadSet(TIMER0_BASE, TIMER_A, g_ui32SysClock /30);
 
     /* Configure the Timer 0A interrupt for timeout. */
     TimerIntRegister(TIMER0_BASE, TIMER_A, xTimerHandler);

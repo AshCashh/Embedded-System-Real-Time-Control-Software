@@ -221,14 +221,14 @@ static void prvLightSensorTask(void *pvParameters)
                 xMessage.uFiltered = filteredLux;
                 xMessage.uRaw = convertedLux;
                 UARTprintf("Lux: %d\n",  xMessage.uRaw);
-                // if (xQueueSend(xStructQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
-                // {
-                //     UARTprintf("Data sent to queue: %d\n", (int)convertedLux);
-                // }
-                // else
-                // {
-                //     UARTprintf("Error: Failed to send data to the queue\n");
-                // }
+                if (xQueueSend(xStructQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
+                {
+                    UARTprintf("Data sent to queue: %d\n", (int)convertedLux);
+                }
+                else
+                {
+                    UARTprintf("Error: Failed to send data to the queue\n");
+                }
             }
         }
     }

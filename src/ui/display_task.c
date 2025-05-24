@@ -1107,7 +1107,6 @@ static void prvDisplayTask(void *pvParameters)
         // block until ISR gives semaphore
         if (xSemaphoreTake(xSemaphoreTimer0, portMAX_DELAY) == pdTRUE)
         {
-            uint32_t t0 = xTaskGetTickCount();
             //
             // Process any messages in the widget message queue.
             //
@@ -1126,8 +1125,6 @@ static void prvDisplayTask(void *pvParameters)
                 GrStringDrawCentered(&sContext, time_string, -1,
                                      120, 177, 0);
             }
-            uint32_t t1 = xTaskGetTickCount();
-            UARTprintf("        Display task run duration: %u ms\n", t1 - t0);
         }
     }
 }
