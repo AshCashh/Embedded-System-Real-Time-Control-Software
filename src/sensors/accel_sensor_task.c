@@ -258,7 +258,7 @@ static void prvAccelTask(void *pvParameters)
             xMessage.uRaw = avgAbsAccel_raw;
             if (xQueueSend(xBMIQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
             {
-                UARTprintf("Data sent to queue: %d\n", (int)avgAbsAccel);
+                UARTprintf("Data sent to queue: %d.%d\n", (int)avgAbsAccel,(int)(avgAbsAccel * 100) % 100);
             }
             else
             {
