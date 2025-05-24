@@ -90,6 +90,7 @@
 #include "utils/ustdlib.h"
 #include "drivers/Kentec320x240x16_ssd2119_spi.h"
 #include "drivers/touch.h"
+
 /*-----------------------------------------------------------*/
 
 /* The system clock frequency. */
