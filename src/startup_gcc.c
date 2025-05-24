@@ -94,7 +94,7 @@ void (* const g_pfnVectors[])(void) =
     IntDefaultHandler,                      // GPIO Port A
     IntDefaultHandler,                      // GPIO Port B
     IntDefaultHandler,                      // GPIO Port C
-    IntDefaultHandler,                      // GPIO Port D
+    xBMI160DataReadyHandler,                      // GPIO Port D
     IntDefaultHandler,                      // GPIO Port E
     IntDefaultHandler,                      // UART0 Rx and Tx
     IntDefaultHandler,                      // UART1 Rx and Tx
@@ -170,7 +170,7 @@ void (* const g_pfnVectors[])(void) =
     IntDefaultHandler,                      // GPIO Port P (Summary or P0)
     IntDefaultHandler,                      // GPIO Port P1
     IntDefaultHandler,                      // GPIO Port P2
-    xBMI160DataReadyHandler,                      // GPIO Port P3
+    IntDefaultHandler,                      // GPIO Port P3
     IntDefaultHandler,                      // GPIO Port P4
     IntDefaultHandler,                      // GPIO Port P5
     IntDefaultHandler,                      // GPIO Port P6

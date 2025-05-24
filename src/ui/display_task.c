@@ -1070,7 +1070,7 @@ void vCreateDisplayTask(void)
                 "Display Task",
                 1024,
                 NULL,
-                tskIDLE_PRIORITY+4,
+                tskIDLE_PRIORITY,
                 NULL);
 }
 /*-----------------------------------------------------------*/
@@ -1104,13 +1104,14 @@ static void prvDisplayTask(void *pvParameters)
     //
     for (;;)
     {
-        //
-        // Process any messages in the widget message queue.
-        //
-        WidgetMessageQueueProcess();
         // block until ISR gives semaphore
-        if (xSemaphoreTake(xSemaphoreTimer0, 0) == pdTRUE)
+        if (xSemaphoreTake(xSemaphoreTimer0, portMAX_DELAY) == pdTRUE)
         {
+            uint32_t t0 = xTaskGetTickCount();
+            //
+            // Process any messages in the widget message queue.
+            //
+            WidgetMessageQueueProcess();
             if (g_ui32Panel == 0)
             {
                 GrContextForegroundSet(&sContext, ClrBlack);
@@ -1125,20 +1126,19 @@ static void prvDisplayTask(void *pvParameters)
                 GrStringDrawCentered(&sContext, time_string, -1,
                                      120, 177, 0);
             }
+            uint32_t t1 = xTaskGetTickCount();
+            UARTprintf("        Display task run duration: %u ms\n", t1 - t0);
         }
-        vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
 
 void xTimerHandler(void)
 {
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-
+    TimerIntClear(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
     UpdateTime();
-
     xSemaphoreGiveFromISR(xSemaphoreTimer0, &xHigherPriorityTaskWoken);
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 
-    TimerIntClear(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
 }
 

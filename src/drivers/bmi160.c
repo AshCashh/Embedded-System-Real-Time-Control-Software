@@ -121,30 +121,30 @@ bool sensorBMI160Init(void)
         return false;
     }
 
-    // Pull up resistor for INT2
+    // Pull up resistor for INT1
     uint8_t int_behaviour =
-        (1 << 3)    // INT2 output enabled
-        | (0 << 2)  // INT2 push-pull/open-drain
-        | (1 << 1); // INT2 active high
+        (1 << 3)    // INT1 output enabled
+        | (0 << 2)  // INT1 push-pull/open-drain
+        | (1 << 1); // INT1 active high
     if (!writeI2C_acc(BMI160_IC2_ADDRESS_VDDIO, REG_IN_OUT_CTRL, &int_behaviour, 1))
     {
         return false;
     }
 
     // enable data ready interrupt, 1 for [1] mask
-    uint8_t data_ready_int = 0b00010000;
+    uint8_t data_ready_int = (1 << 4);
     if (!writeI2C_acc(BMI160_IC2_ADDRESS_VDDIO, (REG_INT_EN | 0x01), &data_ready_int, 1))
     { // 0x01 OR for selecting second field
         return false;
     }
 
-    // enable GPIOP interrupt
-    GPIOIntEnable(GPIO_PORTP_BASE, GPIO_PIN_3);
+    // // enable GPIOP interrupt
+    // GPIOIntEnable(GPIO_PORTP_BASE, GPIO_PIN_3);
 
-    IntEnable(INT_GPIOP3);
+    // IntEnable(INT_GPIOP3);
 
-    // enable interrupts
-    IntMasterEnable();
+    // // enable interrupts
+    // IntMasterEnable();
 
     uint8_t val1;
     readI2C(BMI160_IC2_ADDRESS_VDDIO, 0x40, &val1);

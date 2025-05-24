@@ -159,7 +159,7 @@ void vCreateAccelTask(void)
                 "Accel Task",
                 configMINIMAL_STACK_SIZE,
                 NULL,
-                tskIDLE_PRIORITY+1,
+                tskIDLE_PRIORITY+3,
                 NULL);
 }
 
@@ -187,10 +187,10 @@ static void prvAccelTask(void *pvParameters)
     static uint32_t lastTick = 0;
     static uint32_t sampleCounter = 0;
 
-
+    HWREG(NVIC_SW_TRIG) = INT_GPIOD;
     while (1)
     {
-        if (xSemaphoreTake(xSampleAccelSemaphore, pdMS_TO_TICKS(20)) == pdTRUE)
+        if (xSemaphoreTake(xSampleAccelSemaphore, portMAX_DELAY) == pdTRUE)
         {
             // UARTprintf("    Reading sensor...\n");
             if (!sensorBMI160Read(rawData))
@@ -199,17 +199,17 @@ static void prvAccelTask(void *pvParameters)
             }
             uint32_t currentTick = xTaskGetTickCount();
                 sampleCounter++;
-            // if (sampleCounter >= 100)  // Log every 20 samples (~every 200 ms at 100 Hz)
-            // {
-            //     if (lastTick != 0) {
-            //         uint32_t delta = currentTick - lastTick;
-            //         float frequency = (1000.0f * sampleCounter) / delta;  // ticks in ms
-            //         float avgInterval = (float)delta / sampleCounter;
-            //         UARTprintf("Avg interval: %d ms, approx %d Hz\n", (int)avgInterval, (int)frequency);
-            //     }
-            //     lastTick = currentTick;
-            //     sampleCounter = 0;
-            // }
+            if (sampleCounter >= 20)  // Log every 20 samples (~every 200 ms at 100 Hz)
+            {
+                if (lastTick != 0) {
+                    uint32_t delta = currentTick - lastTick;
+                    float frequency = (1000.0f * sampleCounter) / delta;  // ticks in ms
+                    float avgInterval = (float)delta / sampleCounter;
+                    UARTprintf("Avg interval: %d ms, approx %d.%d Hz\n", (int)avgInterval, (int)frequency, (int)(frequency * 100) % 100);;
+                }
+                lastTick = currentTick;
+                sampleCounter = 0;
+            }
 
 
             // UARTprintf("RAW: %02X %02X %02X %02X %02X %02X\n", rawData[0], rawData[1], rawData[2], rawData[3], rawData[4], rawData[5]);
@@ -248,7 +248,7 @@ static void prvAccelTask(void *pvParameters)
 
             // Calculate average absolute acceleration
             float avgAbsAccel = (fabs(filteredX) + fabs(filteredY) + fabs(fabs(filteredZ) - 9.81)) / 3.0f;
-            UARTprintf("Acceleration: %d.%d\n", (int)avgAbsAccel,(int)(avgAbsAccel * 100) % 100);
+            //UARTprintf("Acceleration: %d.%d\n", (int)avgAbsAccel,(int)(avgAbsAccel * 100) % 100);
         //     UARTprintf("Filtered Accel: X: %d, Y: %d, Z: %d\n",
         //    (int)(filteredX * 1000),
         //    (int)(filteredY * 1000),
@@ -278,6 +278,8 @@ void xBMI160DataReadyHandler(void) {
     // uint32_t now = xTaskGetTickCount();
     // UARTprintf("delta=%d\n", now, now - lastTick);
     // lastTick = now;
-    GPIOIntClear(GPIO_PORTP_BASE, GPIO_PIN_3);
+    // UARTprintf("-------------------------- Interrupt triggered\n");
+    GPIOIntClear(GPIO_PORTD_BASE, GPIO_PIN_4);
     xSemaphoreGiveFromISR(xSampleAccelSemaphore, &xSignalTaskWoken);
+    portYIELD_FROM_ISR(xSignalTaskWoken);
 }

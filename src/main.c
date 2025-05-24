@@ -178,7 +178,7 @@ int main( void )
     {
         /* Configure application specific hardware and initialize the task thread. */
         taskENTER_CRITICAL();
-        vCreateLightSensorTask();
+        //vCreateLightSensorTask();
         vCreateDisplayTask();
         vCreateAccelTask();
         taskEXIT_CRITICAL();
@@ -239,9 +239,6 @@ static void prvBMI160DataReady(void) {
     GPIOIntEnable(GPIO_PORTD_BASE, GPIO_PIN_4);
 
     IntEnable(INT_GPIOD);
-
-    // enable interrupts
-    IntMasterEnable();
 }
 
 // config UART
