@@ -42,7 +42,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "semphr.h"
-
+#include "event_groups.h"
 /* Hardware includes. */
 #include "inc/hw_ints.h"
 #include "inc/hw_memmap.h"
@@ -76,6 +76,7 @@
 #include "images.h"
 #include "driverlib/timer.h"
 #include "includes/motor.h"
+#include "includes/light_sensor_task.h"
 #include "includes/shared_variables.h"
 /*-----------------------------------------------------------*/
 #include <stdbool.h>
@@ -91,7 +92,21 @@ void __error__(char *pcFilename, uint32_t ui32Line)
 {
 }
 #endif
+typedef enum
+{
+    PLOT_LIGHT,
+    PLOT_ACCEL,
+    PLOT_RPM,
+    PLOT_POWER
+} PlotType;
+#define LIGHT_DATA_BUFFER_SIZE 100
+uint32_t g_ui32LightDataBuffer[LIGHT_DATA_BUFFER_SIZE] = {0};
+uint32_t g_ui32LightDataIndex = 0;
+volatile PlotType g_eCurrentPlot = PLOT_LIGHT;
+uint32_t g_ui32LightDataCount = 0; // Add this global variable
 
+extern tCanvasWidget g_sCanvas3;
+extern tCanvasWidget g_sCanvas1;
 //*****************************************************************************
 //
 // Gloal variable used to store the frequency of the system clock.
@@ -112,6 +127,7 @@ volatile uint8_t timer_minutes;
 volatile uint8_t timer_seconds;
 char time_string[MAX_TIME_LENGTH];
 char date[MAX_DATE_LENGTH];
+volatile bool g_bLightPlotEnabled = false;
 
 //*****************************************************************************
 //
@@ -144,6 +160,7 @@ void OnButtonPress(tWidget *psWidget);
 void OnSliderChange(tWidget *psWidget, int32_t i32Value);
 extern tCanvasWidget g_psPanels[];
 
+static void vSensorData(uint32_t *data, int dataSize, PlotType plotType);
 /*
  * The tasks as described in the comments at the top of this file.
  */
@@ -154,7 +171,7 @@ void SetStartTime(uint8_t hours, uint8_t minutes, uint8_t seconds, const char *s
 void intToTwoDigitString(uint8_t num, char *str);
 void UpdateTimeString(uint8_t hours, uint8_t minutes, uint8_t seconds, char *timeStr);
 
-void OnLimitSliderChange(tWidget *psWidget, int32_t i32Value); 
+void OnLimitSliderChange(tWidget *psWidget, int32_t i32Value);
 
 void UpdateTime(void)
 {
@@ -276,7 +293,6 @@ OnRpmChange(tWidget *psWidget, int32_t i32Value)
 //*****************************************************************************
 // Define sliders for motor limits
 
-
 //*****************************************************************************
 //
 // The first panel, which demonstrates the graphics primitives.
@@ -285,7 +301,7 @@ OnRpmChange(tWidget *psWidget, int32_t i32Value)
 
 tSliderWidget g_psSliders[] =
     {
-        SliderStruct(g_psPanels + 1, 0, 0, // parent, next, prev
+        SliderStruct(g_psPanels + 1, 0, 0,                                       // parent, next, prev
                      &g_sKentec320x240x16_SSD2119, 150, 60, 140, 30, 0, 100, 25, // x, y, width, height
                      (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE |
                       SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
@@ -293,68 +309,74 @@ tSliderWidget g_psSliders[] =
                      &g_sFontCm20, "25%", 0, 0, OnSliderChange),
 };
 
-
 tSliderWidget g_psLimitSliders[] = {
     // Current Lower Limit
     SliderStruct(g_psPanels + 1, &g_psLimitSliders[1], 0, &g_sKentec320x240x16_SSD2119,
-        20, 45, 280, 30, 0, 100, 10, // x, y, width, height
-        (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
-        ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
-        &g_sFontCm20, "10 A", 0, 0, OnLimitSliderChange),
+                 20, 45, 280, 30, 0, 100, 10, // x, y, width, height
+                 (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
+                 ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
+                 &g_sFontCm20, "10 A", 0, 0, OnLimitSliderChange),
     // Current Upper Limit
     SliderStruct(g_psPanels + 1, &g_psLimitSliders[2], 0, &g_sKentec320x240x16_SSD2119,
-        20, 75, 280, 30, 0, 100, 50,
-        (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
-        ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
-        &g_sFontCm20, "50 A", 0, 0, OnLimitSliderChange),
+                 20, 75, 280, 30, 0, 100, 50,
+                 (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
+                 ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
+                 &g_sFontCm20, "50 A", 0, 0, OnLimitSliderChange),
     // Acceleration Lower Limit
     SliderStruct(g_psPanels + 1, &g_psLimitSliders[3], 0, &g_sKentec320x240x16_SSD2119,
-        20, 130, 280, 30, 0, 20, 5,
-        (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
-        ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
-        &g_sFontCm20, "5 g", 0, 0, OnLimitSliderChange),
+                 20, 130, 280, 30, 0, 20, 5,
+                 (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
+                 ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
+                 &g_sFontCm20, "5 g", 0, 0, OnLimitSliderChange),
     // Acceleration Upper Limit
     SliderStruct(g_psPanels + 1, 0, 0, &g_sKentec320x240x16_SSD2119,
-        20, 160, 280, 30, 0, 20, 15,
-        (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
-        ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
-        &g_sFontCm20, "15 g", 0, 0, OnLimitSliderChange),
+                 20, 160, 280, 30, 0, 20, 15,
+                 (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
+                 ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
+                 &g_sFontCm20, "15 g", 0, 0, OnLimitSliderChange),
 };
 
 tCanvasWidget g_sLimitSlidersCanvas = CanvasStruct(
-    g_psPanels + 1, // parent
-    0,              // next
+    g_psPanels + 1,       // parent
+    0,                    // next
     &g_psLimitSliders[0], // child: first slider
     &g_sKentec320x240x16_SSD2119,
-    0, 0,           // x, y
-    320, 190,       // width, height
+    0, 0,                                       // x, y
+    320, 190,                                   // width, height
     CANVAS_STYLE_FILL | CANVAS_STYLE_APP_DRAWN, // style
-    ClrBlack,       // fill color
-    0,              // outline color
-    0,              // text color
-    &g_sFontCm20,   // font
-    0,              // text
-    0,              // image
-    OnMotorPanelPaint // paint callback
+    ClrBlack,                                   // fill color
+    0,                                          // outline color
+    0,                                          // text color
+    &g_sFontCm20,                               // font
+    0,                                          // text
+    0,                                          // image
+    OnMotorPanelPaint                           // paint callback
 );
 
 void OnLimitSliderChange(tWidget *psWidget, int32_t i32Value)
 {
     static char pcText[8];
 
-    if (psWidget == (tWidget *)&g_psLimitSliders[0]) {
+    if (psWidget == (tWidget *)&g_psLimitSliders[0])
+    {
         Motor.current_limit.lower = i32Value;
         usprintf(pcText, "Min: %d A", i32Value);
         SliderTextSet(&g_psLimitSliders[0], pcText);
-    } else if (psWidget == (tWidget *)&g_psLimitSliders[1]) {
+    }
+    else if (psWidget == (tWidget *)&g_psLimitSliders[1])
+    {
         Motor.current_limit.upper = i32Value;
         usprintf(pcText, "Max: %d A", i32Value);
         SliderTextSet(&g_psLimitSliders[1], pcText);
-    } else if (psWidget == (tWidget *)&g_psLimitSliders[2]) {
+    }
+    else if (psWidget == (tWidget *)&g_psLimitSliders[2])
+    {
         Motor.acceleration_limit.lower = i32Value;
         usprintf(pcText, "Min: %d g", i32Value);
         SliderTextSet(&g_psLimitSliders[2], pcText);
-    } else if (psWidget == (tWidget *)&g_psLimitSliders[3]) {
+    }
+    else if (psWidget == (tWidget *)&g_psLimitSliders[3])
+    {
         Motor.acceleration_limit.upper = i32Value;
         usprintf(pcText, "Max: %d g", i32Value);
         SliderTextSet(&g_psLimitSliders[3], pcText);
@@ -366,72 +388,6 @@ void OnLimitSliderChange(tWidget *psWidget, int32_t i32Value)
 #define SLIDER_CANVAS_VAL_INDEX 4
 
 #define NUM_SLIDERS (sizeof(g_psSliders) / sizeof(g_psSliders[0]))
-
-
-// Forward declarations for button handlers
-void OnPlotSelectButton(tWidget *psWidget);
-// Forward declarations for plot select buttons
-extern tPushButtonWidget g_sPlotBtnAccel;
-extern tPushButtonWidget g_sPlotBtnRPM;
-extern tPushButtonWidget g_sPlotBtnPower;
-
-// Now define the buttons in order
-tPushButtonWidget g_sPlotBtnLight = RectangularButtonStruct(
-    g_psPanels + 2, &g_sPlotBtnAccel, 0, &g_sKentec320x240x16_SSD2119,
-    10, 5, 70, 28,
-    PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT,
-    ClrGray, ClrSilver, ClrWhite, ClrBlack,
-    &g_sFontCm18, "Light", 0, 0, 0, 0,
-    OnPlotSelectButton);
-
-tPushButtonWidget g_sPlotBtnAccel = RectangularButtonStruct(
-    g_psPanels + 2, &g_sPlotBtnRPM, 0, &g_sKentec320x240x16_SSD2119,
-    90, 5, 90, 28,
-    PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT,
-    ClrGray, ClrSilver, ClrWhite, ClrBlack,
-    &g_sFontCm18, "Acceleration", 0, 0, 0, 0,
-    OnPlotSelectButton);
-
-tPushButtonWidget g_sPlotBtnRPM = RectangularButtonStruct(
-    g_psPanels + 2, &g_sPlotBtnPower, 0, &g_sKentec320x240x16_SSD2119,
-    190, 5, 60, 28,
-    PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT,
-    ClrGray, ClrSilver, ClrWhite, ClrBlack,
-    &g_sFontCm18, "RPM", 0, 0, 0, 0,
-    OnPlotSelectButton);
-
-tPushButtonWidget g_sPlotBtnPower = RectangularButtonStruct(
-    g_psPanels + 2, 0, 0, &g_sKentec320x240x16_SSD2119,
-    260, 5, 50, 28,
-    PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT,
-    ClrGray, ClrSilver, ClrWhite, ClrBlack,
-    &g_sFontCm18, "Power", 0, 0, 0, 0,
-    OnPlotSelectButton);
-             
-tCanvasWidget g_sSensorPanelCanvas = CanvasStruct(
-    g_psPanels + 2, // parent
-    0,              // next
-    &g_sPlotBtnLight, // child: first plot select button
-    &g_sKentec320x240x16_SSD2119,
-    0, 0,           // x, y
-    320, 190,       // width, height
-    CANVAS_STYLE_FILL, // style
-    ClrBlack, 0, 0, 0, 0, 0, 0
-);
-// Implement the button handler
-void OnPlotSelectButton(tWidget *psWidget)
-{
-    // Set a global variable to indicate which plot to show
-    if (psWidget == (tWidget *)&g_sPlotBtnLight) {
-        // Show Light plot
-    } else if (psWidget == (tWidget *)&g_sPlotBtnAccel) {
-        // Show Acceleration plot
-    } else if (psWidget == (tWidget *)&g_sPlotBtnRPM) {
-        // Show RPM plot
-    } else if (psWidget == (tWidget *)&g_sPlotBtnPower) {
-        // Show Motor Power plot
-    }
-}
 
 tCanvasWidget g_psCheckBoxIndicators[] =
     {
@@ -512,19 +468,126 @@ uint32_t g_ui32ButtonState;
 // The third panel, which demonstrates the canvas widget.
 //
 //*****************************************************************************
-// change this to show how to make a simple plot
-Canvas(g_sCanvas3, g_psPanels + 2, 0, 0, &g_sKentec320x240x16_SSD2119, 20,
-       27, 200, 140, CANVAS_STYLE_OUTLINE | CANVAS_STYLE_APP_DRAWN, 0, ClrGray,
-       0, 0, 0, 0, OnCanvasPaint);
-// Canvas(g_sCanvas2, g_psPanels + 2, 0, 0,
-//        &g_sKentec320x240x16_SSD2119, 20, 27, 140, 150,
-//        CANVAS_STYLE_OUTLINE | CANVAS_STYLE_IMG, 0, ClrGray, 0, 0, 0, g_pui8Logo,
-//        0);
-Canvas(g_sCanvas1, g_psPanels + 2, &g_sCanvas3, 0,
-       &g_sKentec320x240x16_SSD2119, 230, 27, 90, 140,
-       CANVAS_STYLE_FILL | CANVAS_STYLE_OUTLINE | CANVAS_STYLE_TEXT,
-       ClrMidnightBlue, ClrGray, ClrSilver, &g_sFontCm22, "Text", 0, 0);
+// Forward declarations for button handlers
+void OnPlotSelectButton(tWidget *psWidget);
+// Forward declarations for plot select buttons
+extern tPushButtonWidget g_sPlotBtnAccel;
+extern tPushButtonWidget g_sPlotBtnRPM;
+extern tPushButtonWidget g_sPlotBtnPower;
 
+// Now define the buttons in order
+tPushButtonWidget g_sPlotBtnLight = RectangularButtonStruct(
+    g_psPanels + 2, &g_sPlotBtnAccel, 0, &g_sKentec320x240x16_SSD2119,
+    25, 5, 70, 28, // x, y, width, height
+    PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT,
+    ClrGray, ClrSilver, ClrWhite, ClrBlack,
+    &g_sFontCm18, "Light", 0, 0, 0, 0,
+    OnPlotSelectButton);
+
+tPushButtonWidget g_sPlotBtnAccel = RectangularButtonStruct(
+    g_psPanels + 2, &g_sPlotBtnRPM, 0, &g_sKentec320x240x16_SSD2119,
+    105, 5, 90, 28,
+    PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT,
+    ClrGray, ClrSilver, ClrWhite, ClrBlack,
+    &g_sFontCm18, "Acceleration", 0, 0, 0, 0,
+    OnPlotSelectButton);
+
+tPushButtonWidget g_sPlotBtnRPM = RectangularButtonStruct(
+    g_psPanels + 2, &g_sPlotBtnPower, 0, &g_sKentec320x240x16_SSD2119,
+    205, 5, 60, 28,
+    PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT,
+    ClrGray, ClrSilver, ClrWhite, ClrBlack,
+    &g_sFontCm18, "RPM", 0, 0, 0, 0,
+    OnPlotSelectButton);
+
+// Change the last plot button's next pointer to the plot canvas
+tPushButtonWidget g_sPlotBtnPower = RectangularButtonStruct(
+    g_psPanels + 2, &g_sCanvas3, 0, &g_sKentec320x240x16_SSD2119,
+    270, 5, 50, 28,
+    PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT,
+    ClrGray, ClrSilver, ClrWhite, ClrBlack,
+    &g_sFontCm18, "Power", 0, 0, 0, 0,
+    OnPlotSelectButton);
+
+Canvas(g_sCanvas3, g_psPanels + 2, 0, 0,
+       &g_sKentec320x240x16_SSD2119, 0, 35, 320, 155,
+       CANVAS_STYLE_OUTLINE | CANVAS_STYLE_APP_DRAWN, 0, ClrGray,
+       0, 0, 0, 0, OnCanvasPaint);
+
+// Now, the sensor panel canvas should have the first plot button as its child
+tCanvasWidget g_sSensorPanelCanvas = CanvasStruct(
+    g_psPanels + 2,   // parent
+    0,                // next
+    &g_sPlotBtnLight, // child: first plot select button
+    &g_sKentec320x240x16_SSD2119,
+    0, 0,              // x, y
+    320, 190,          // width, height
+    CANVAS_STYLE_FILL, // style
+    ClrBlack, 0, 0, 0, 0, 0, 0);
+
+// Implement the button handler
+void OnPlotSelectButton(tWidget *psWidget)
+{
+    // Reset all plot buttons to default color
+    PushButtonFillColorSet(&g_sPlotBtnLight, ClrGray);
+    PushButtonFillColorSet(&g_sPlotBtnAccel, ClrGray);
+    PushButtonFillColorSet(&g_sPlotBtnRPM, ClrGray);
+    PushButtonFillColorSet(&g_sPlotBtnPower, ClrGray);
+
+    g_bLightPlotEnabled = false; // Default: plotting disabled
+
+    if (psWidget == (tWidget *)&g_sPlotBtnLight)
+    {
+        g_eCurrentPlot = PLOT_LIGHT;
+        PushButtonFillColorSet(&g_sPlotBtnLight, ClrYellow);
+
+        // Reset buffer and index for new plot
+        for (uint32_t i = 0; i < LIGHT_DATA_BUFFER_SIZE; i++)
+            g_ui32LightDataBuffer[i] = 0;
+        g_ui32LightDataIndex = 0;
+        g_ui32LightDataCount = 0;
+
+        g_bLightPlotEnabled = true; // Enable plotting for light
+
+        // Draw axes and labels immediately
+        tRectangle sRect = {10, 40, 310, 180};
+        GrContextForegroundSet(&sContext, ClrBlack);
+        GrRectFill(&sContext, &sRect);
+        GrContextForegroundSet(&sContext, ClrWhite);
+        GrLineDraw(&sContext, 10, 180, 310, 180); // X-axis
+        GrLineDraw(&sContext, 10, 40, 10, 180);   // Y-axis
+        // GrContextFontSet(&sContext, g_psFontFixed6x8);
+        // GrStringDraw(&sContext, "Time", -1, 160, 192, false);
+        // GrStringDraw(&sContext, "Lux", -1, 20, 35, false);
+    }
+    else if (psWidget == (tWidget *)&g_sPlotBtnAccel)
+    {
+        g_eCurrentPlot = PLOT_ACCEL;
+        PushButtonFillColorSet(&g_sPlotBtnAccel, ClrYellow);
+        // (reset accel buffer here if you add it)
+    }
+    else if (psWidget == (tWidget *)&g_sPlotBtnRPM)
+    {
+        g_eCurrentPlot = PLOT_RPM;
+        PushButtonFillColorSet(&g_sPlotBtnRPM, ClrYellow);
+        // (reset rpm buffer here if you add it)
+    }
+    else if (psWidget == (tWidget *)&g_sPlotBtnPower)
+    {
+        g_eCurrentPlot = PLOT_POWER;
+        PushButtonFillColorSet(&g_sPlotBtnPower, ClrYellow);
+        // (reset power buffer here if you add it)
+    }
+
+    // Repaint all plot buttons to update highlight
+    WidgetPaint((tWidget *)&g_sPlotBtnLight);
+    WidgetPaint((tWidget *)&g_sPlotBtnAccel);
+    WidgetPaint((tWidget *)&g_sPlotBtnRPM);
+    WidgetPaint((tWidget *)&g_sPlotBtnPower);
+
+    // Force a repaint of the third panel
+    WidgetPaint((tWidget *)&g_psPanels[2]);
+}
 //*****************************************************************************
 //
 // An array of canvas widgets, one per panel.  Each canvas is filled with
@@ -532,16 +595,16 @@ Canvas(g_sCanvas1, g_psPanels + 2, &g_sCanvas3, 0,
 //
 //*****************************************************************************
 tCanvasWidget g_psPanels[] =
-{
-    // Dashboard panel
-    CanvasStruct(0, 0, &g_sDashboard, &g_sKentec320x240x16_SSD2119, 0, 0,
-                 320, 190, CANVAS_STYLE_FILL, ClrBlack, 0, 0, 0, 0, 0, 0),
-    // Motor Control panel (second panel)
-    CanvasStruct(0, 0, &g_sLimitSlidersCanvas, &g_sKentec320x240x16_SSD2119, 0, 0,
-                 320, 190, CANVAS_STYLE_FILL, ClrBlack, 0, 0, 0, 0, 0, 0),
-    // Sensor Graphs panel
-    CanvasStruct(0, 0, &g_sSensorPanelCanvas, &g_sKentec320x240x16_SSD2119, 0, 0, 320,
-                 190, CANVAS_STYLE_FILL, ClrBlack, 0, 0, 0, 0, 0, 0),
+    {
+        // Dashboard panel
+        CanvasStruct(0, 0, &g_sDashboard, &g_sKentec320x240x16_SSD2119, 0, 0,
+                     320, 190, CANVAS_STYLE_FILL, ClrBlack, 0, 0, 0, 0, 0, 0),
+        // Motor Control panel (second panel)
+        CanvasStruct(0, 0, &g_sLimitSlidersCanvas, &g_sKentec320x240x16_SSD2119, 0, 0,
+                     320, 190, CANVAS_STYLE_FILL, ClrBlack, 0, 0, 0, 0, 0, 0),
+        // Sensor Graphs panel
+        CanvasStruct(0, 0, &g_sSensorPanelCanvas, &g_sKentec320x240x16_SSD2119, 0, 0, 320,
+                     190, CANVAS_STYLE_FILL, ClrBlack, 0, 0, 0, 0, 0, 0),
 };
 
 //*****************************************************************************
@@ -582,8 +645,6 @@ RectangularButton(g_sNext, 0, 0, 0, &g_sKentec320x240x16_SSD2119, 275, 195,
                   40, 40, PB_STYLE_IMG | PB_STYLE_TEXT, ClrBlack, ClrBlack, 0,
                   ClrSilver, &g_sFontCm20, "+", g_pui8Blue50x50,
                   g_pui8Blue50x50Press, 0, 0, OnNext);
-
-
 
 //*****************************************************************************
 //
@@ -870,53 +931,18 @@ void OnMotorPanelPaint(tWidget *psWidget, tContext *psContext)
 //*****************************************************************************
 void OnCanvasPaint(tWidget *psWidget, tContext *psContext)
 {
-
-    // define and draw the scale
-    uint32_t xMax = 10;
-    uint32_t yMax = 90;
-    GrContextFontSet(&sContext, &g_sFontCm20);
-    GrStringDrawCentered(&sContext, "90", -1,
-                         10, 33, 0);
-    GrStringDrawCentered(&sContext, "0", -1,
-                         10, 160, 0);
-    GrStringDrawCentered(&sContext, "0s", -1,
-                         30, 175, 0);
-    GrStringDrawCentered(&sContext, "10s", -1,
-                         210, 175, 0);
-
-    // define the size of the canvas - Eg: 20, 27, 200, 140
-    uint32_t canvas_xMin = 20;
-    uint32_t canvas_xRange = 200;
-    uint32_t canvas_yMin = 27;
-    uint32_t canvas_yRange = 140;
-
-    // define a list of integers
-    uint32_t plot_data[10] = {1, 2, 4, 8, 16, 32, 64, 128, 256, 512};
-
-    // iterate through the data and draw a rectangle on the screen
-    uint32_t ui32Idx;
-    tRectangle sRect;
-    GrContextForegroundSet(psContext, ClrGoldenrod);
-    for (ui32Idx = 0; ui32Idx < 10; ui32Idx += 1)
+    if (g_eCurrentPlot == PLOT_LIGHT && g_ui32LightDataCount == 0)
     {
-        // get the value of each element and convert to plotting coordinate
-        float display_y = plot_data[ui32Idx];
-        display_y = canvas_yMin + canvas_yRange - (display_y / yMax) * canvas_yRange;
-
-        // get the current index, denoting time
-        float display_x = ui32Idx;
-        display_x = (display_x / xMax) * canvas_xRange + canvas_xMin;
-
-        // draw rectangle here
-        sRect.i16XMin = display_x;
-        sRect.i16YMin = display_y - 10;
-        // sRect.i16XMax = GrContextDpyWidthGet(psContext) - 1;
-        sRect.i16XMax = display_x + 10;
-        sRect.i16YMax = display_y;
-        GrContextForegroundSet(psContext, ClrDarkBlue);
+        // Draw axes and labels only
+        tRectangle sRect = {10, 40, 310, 180};
+        GrContextForegroundSet(psContext, ClrBlack);
         GrRectFill(psContext, &sRect);
         GrContextForegroundSet(psContext, ClrWhite);
-        GrRectDraw(psContext, &sRect);
+        GrLineDraw(psContext, 10, 180, 310, 180); // X-axis
+        GrLineDraw(psContext, 10, 40, 10, 180);   // Y-axis
+        // GrContextFontSet(psContext, g_psFontFixed6x8);
+        // GrStringDraw(psContext, "Time", -1, 160, 192, false);
+        // GrStringDraw(psContext, "Lux", -1, 4, 30, false);
     }
 }
 
@@ -1056,6 +1082,11 @@ void OnSliderChange(tWidget *psWidget, int32_t i32Value)
 
 void vCreateDisplayTask(void)
 {
+    if (xStructQueue == NULL)
+    {
+        UARTprintf("Failed to create queue\n");
+        return;
+    }
     /* Create the task as described in the comments at the top of this file.
      *
      * The xTaskCreate parameters in order are:
@@ -1077,8 +1108,13 @@ void vCreateDisplayTask(void)
 
 static void prvDisplayTask(void *pvParameters)
 {
+    UARTprintf("Display task started\n");
     tRectangle sRect;
 
+    struct AMessage xRxedStructure;
+    uint32_t buffer_data[100] = {0};
+    uint32_t data_index = 0;
+    bool plotRawData = false; // Flag to toggle between raw and filtered data
     //
     // Add the title block and the previous and next buttons to the widget
     // tree.
@@ -1086,7 +1122,6 @@ static void prvDisplayTask(void *pvParameters)
     WidgetAdd(WIDGET_ROOT, (tWidget *)&g_sTitle);
     WidgetAdd(WIDGET_ROOT, (tWidget *)&g_sNext);
     WidgetAdd(WIDGET_ROOT, (tWidget *)&g_sPrevious);
-
     //
     // Add the first panel to the widget tree.
     //
@@ -1104,6 +1139,7 @@ static void prvDisplayTask(void *pvParameters)
     //
     for (;;)
     {
+
         // block until ISR gives semaphore
         if (xSemaphoreTake(xSemaphoreTimer0, portMAX_DELAY) == pdTRUE)
         {
@@ -1111,6 +1147,7 @@ static void prvDisplayTask(void *pvParameters)
             // Process any messages in the widget message queue.
             //
             WidgetMessageQueueProcess();
+
             if (g_ui32Panel == 0)
             {
                 GrContextForegroundSet(&sContext, ClrBlack);
@@ -1125,17 +1162,142 @@ static void prvDisplayTask(void *pvParameters)
                 GrStringDrawCentered(&sContext, time_string, -1,
                                      120, 177, 0);
             }
+           
+        }
+        if (g_ui32Panel == 2 && g_eCurrentPlot == PLOT_LIGHT && g_bLightPlotEnabled)
+        {
+            if (xQueueReceive(xStructQueue, &(xRxedStructure), (TickType_t)10) == pdPASS)
+            {
+                g_ui32LightDataBuffer[g_ui32LightDataIndex] = xRxedStructure.uRaw;
+                g_ui32LightDataIndex = (g_ui32LightDataIndex + 1) % LIGHT_DATA_BUFFER_SIZE;
+                if (g_ui32LightDataCount < LIGHT_DATA_BUFFER_SIZE)
+                    g_ui32LightDataCount++;
+
+                vSensorData(g_ui32LightDataBuffer, g_ui32LightDataCount, PLOT_LIGHT);
+            }
         }
     }
 }
+static void vSensorData(uint32_t *data, int dataSize, PlotType plotType)
+{
+    // Plot area
+    uint32_t xStart = 10;  // left edge of plot
+    uint32_t yStart = 180; // bottom edge of plot
+    uint32_t yTop = 40;    // top edge of plot
+    uint32_t xStep = 3;    // Distance between points on the X-axis
+    uint32_t plotWidth = 300;
+    uint32_t maxPoints = plotWidth / xStep;
 
+    // Axis scaling and labels
+    uint32_t yMin = 0, yMax = 100, yScale = 1;
+    const char *yLabel = "";
+    const char *xLabel = "Time (s)";
+
+    switch (plotType)
+    {
+    case PLOT_LIGHT:
+        yMin = 0;
+        yMax = 500;
+        yScale = 1; // 1 unit per lux
+        yLabel = "Lux";
+        break;
+    case PLOT_ACCEL:
+        yMin = 0;
+        yMax = 20;
+        yScale = 1; // adjust as needed
+        yLabel = "g";
+        break;
+    case PLOT_RPM:
+        yMin = 0;
+        yMax = 2500;
+        yScale = 1; // adjust as needed
+        yLabel = "RPM";
+        break;
+    case PLOT_POWER:
+        yMin = 0;
+        yMax = 1000;
+        yScale = 1; // adjust as needed
+        yLabel = "W";
+        break;
+    default:
+        break;
+    }
+
+    // If we've filled the plot, clear the area and reset the buffer, but keep the new point
+    if (dataSize >= maxPoints)
+    {
+        // Clear the plotting area
+        tRectangle sRect = {xStart, yTop, xStart + plotWidth, yStart};
+        GrContextForegroundSet(&sContext, ClrBlack);
+        GrRectFill(&sContext, &sRect);
+
+        // Draw the axes
+        GrContextForegroundSet(&sContext, ClrWhite);
+        GrLineDraw(&sContext, xStart, yStart, xStart + plotWidth, yStart); // X-axis
+        GrLineDraw(&sContext, xStart, yTop, xStart, yStart);               // Y-axis
+
+        // Save the latest value
+        uint32_t lastValue = data[dataSize - 1];
+
+        // Reset buffer and index, and add the new value as the first point
+        for (uint32_t i = 0; i < maxPoints; i++)
+            data[i] = 0;
+        data[0] = lastValue;
+        g_ui32LightDataIndex = 1;
+        g_ui32LightDataCount = 1;
+        return;
+    }
+
+    // Draw only the new segment
+    if (dataSize > 1)
+    {
+        uint32_t i = dataSize - 1;
+        uint32_t x1 = xStart + (i - 1) * xStep;
+        uint32_t x2 = xStart + i * xStep;
+
+        // Scale and clamp Y values to plot area
+        uint32_t y1 = yStart - ((data[i - 1] - yMin) * (yStart - yTop)) / (yMax - yMin);
+        uint32_t y2 = yStart - ((data[i] - yMin) * (yStart - yTop)) / (yMax - yMin);
+
+        if (y1 < yTop)
+            y1 = yTop;
+        if (y1 > yStart)
+            y1 = yStart;
+        if (y2 < yTop)
+            y2 = yTop;
+        if (y2 > yStart)
+            y2 = yStart;
+
+        GrContextForegroundSet(&sContext, ClrRed);
+        GrLineDraw(&sContext, x1, y1, x2, y2);
+    }
+    // Add labels for the axes
+    GrContextForegroundSet(&sContext, ClrWhite);
+    GrContextFontSet(&sContext, g_psFontFixed6x8);
+    GrStringDraw(&sContext, xLabel, -1, xStart + 125, yStart + 12, false); // X-axis label
+    GrStringDraw(&sContext, yLabel, -1, 20, 33, false);                    // Y-axis label
+    // Draw Y axis min/max labels
+    GrContextFontSet(&sContext, g_psFontFixed6x8);
+    char yMinStr[8], yMaxStr[8];
+    usprintf(yMinStr, "%u", yMin);
+    usprintf(yMaxStr, "%u", yMax);
+    GrStringDraw(&sContext, yMinStr, -1, xStart - 8, yStart - 8, false);
+    GrStringDraw(&sContext, yMaxStr, -1, xStart - 8, yTop - 15, false);
+    // Draw X axis labels
+    GrStringDraw(&sContext, "20", -1, 305, yStart + 10, false);
+}
 void xTimerHandler(void)
 {
+    static int count = 0;
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     TimerIntClear(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
-    UpdateTime();
+    if (count == 30)
+    {
+        UpdateTime();
+        count = 0;
+    }
+    count++;
+
     xSemaphoreGiveFromISR(xSemaphoreTimer0, &xHigherPriorityTaskWoken);
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-
 }
-
