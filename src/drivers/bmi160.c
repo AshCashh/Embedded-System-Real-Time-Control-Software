@@ -71,6 +71,7 @@
  **************************************************************************************************/
 bool sensorBMI160Init(void)
 {
+    vTaskDelay(pdMS_TO_TICKS(150));
     // softreset value to cmd reg
     uint8_t val = 0xB6;
     // reset sensor
@@ -78,7 +79,7 @@ bool sensorBMI160Init(void)
     {
         return false;
     }
-    vTaskDelay(pdMS_TO_TICKS(100));
+    vTaskDelay(pdMS_TO_TICKS(150));
     
 
     // enable accelerometer

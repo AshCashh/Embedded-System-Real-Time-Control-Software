@@ -131,6 +131,7 @@ bool readI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint16_t len)
     I2CMasterDataPut(I2C2_BASE, ui8Reg);
     I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_START);
     if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(50)) != pdTRUE)
+        UARTprintf("First Write Failed\n");
         return false;
 
     I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_FINISH); // Send stop

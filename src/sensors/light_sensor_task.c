@@ -208,14 +208,14 @@ static void prvLightSensorTask(void *pvParameters)
                 filteredLux = MovingAverageFilter(filterBuffer, &filterIndex, &filterSum, FILTER_SIZE, convertedLux);
 
                 // Set event bits based on thresholds
-                if (convertedLux > HIGH_THRESHOLD)
-                {
-                    xEventGroupSetBits(xEventGroup, EVENT_HIGH_THRESHOLD);
-                }
-                else if (convertedLux < LOW_THRESHOLD)
-                {
-                    xEventGroupSetBits(xEventGroup, EVENT_LOW_THRESHOLD);
-                }
+                // if (convertedLux > HIGH_THRESHOLD)
+                // {
+                //     xEventGroupSetBits(xEventGroup, EVENT_HIGH_THRESHOLD);
+                // }
+                // else if (convertedLux < LOW_THRESHOLD)
+                // {
+                //     xEventGroupSetBits(xEventGroup, EVENT_LOW_THRESHOLD);
+                // }
                 // add to queue (both raw and filtered values)
                 xMessage.ulTimeStamp = xTaskGetTickCount();
                 xMessage.uFiltered = filteredLux;

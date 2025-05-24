@@ -200,21 +200,21 @@ static void prvAccelTask(void *pvParameters)
             {
                 UARTprintf("[!] Error Reading\n");
             }
-            uint32_t currentTick = xTaskGetTickCount();
-            sampleCounter++;
-            if (sampleCounter >= 20) // Log every 20 samples (~every 200 ms at 100 Hz)
-            {
-                if (lastTick != 0)
-                {
-                    uint32_t delta = currentTick - lastTick;
-                    float frequency = (1000.0f * sampleCounter) / delta; // ticks in ms
-                    float avgInterval = (float)delta / sampleCounter;
-                    UARTprintf("Avg interval: %d ms, approx %d.%d Hz\n", (int)avgInterval, (int)frequency, (int)(frequency * 100) % 100);
-                    ;
-                }
-                lastTick = currentTick;
-                sampleCounter = 0;
-            }
+            // uint32_t currentTick = xTaskGetTickCount();
+            // sampleCounter++;
+            // if (sampleCounter >= 20) // Log every 20 samples (~every 200 ms at 100 Hz)
+            // {
+            //     if (lastTick != 0)
+            //     {
+            //         uint32_t delta = currentTick - lastTick;
+            //         float frequency = (1000.0f * sampleCounter) / delta; // ticks in ms
+            //         float avgInterval = (float)delta / sampleCounter;
+            //         UARTprintf("Avg interval: %d ms, approx %d.%d Hz\n", (int)avgInterval, (int)frequency, (int)(frequency * 100) % 100);
+            //         ;
+            //     }
+            //     lastTick = currentTick;
+            //     sampleCounter = 0;
+            // }
 
             // UARTprintf("RAW: %02X %02X %02X %02X %02X %02X\n", rawData[0], rawData[1], rawData[2], rawData[3], rawData[4], rawData[5]);
             int16_t acc_x = (int16_t)((rawData[1] << 8) | rawData[0]);
@@ -222,12 +222,12 @@ static void prvAccelTask(void *pvParameters)
             int16_t acc_z = (int16_t)((rawData[5] << 8) | rawData[4]);
 
             // UARTprintf("X: %d, Y: %d, X: %d\n", acc_x, acc_y, acc_z);
-            //  float accelX = acc_x / 16384.0f; // Convert to g
-            //  float accelY = acc_y / 16384.0f; // Convert to g
-            //  float accelZ = acc_z / 16384.0f; // Convert to g
-            float accelX = acc_x / 16384.0f * 9.80665;   // Convert to SI m/s
-            float accelY = acc_y / 16384.0f * 9.80665;   // Convert to SI m/s
-            float accelZ = (acc_z / 16384.0f * 9.80665); // Convert to SI m/s and cancel out gravity
+             float accelX = acc_x / 16384.0f; // Convert to g
+             float accelY = acc_y / 16384.0f; // Convert to g
+             float accelZ = acc_z / 16384.0f; // Convert to g
+            // float accelX = acc_x / 16384.0f * 9.80665;   // Convert to SI m/s
+            // float accelY = acc_y / 16384.0f * 9.80665;   // Convert to SI m/s
+            // float accelZ = (acc_z / 16384.0f * 9.80665); // Convert to SI m/s and cancel out gravity
 
             // Update moving average filters
             filterSumX -= filterBufferX[filterIndex];
@@ -249,23 +249,23 @@ static void prvAccelTask(void *pvParameters)
             float filteredZ = filterSumZ / FILTER_SIZE;
 
             // Calculate average absolute acceleration
-            float avgAbsAccel = (fabs(filteredX) + fabs(filteredY) + fabs(fabs(filteredZ) - 9.81)) / 3.0f;
-            float avgAbsAccel_raw = (fabs(accelX) + fabs(accelY) + fabs(fabs(accelZ) - 9.81)) / 3.0f;
+            float avgAbsAccel = (fabs(filteredX) + fabs(filteredY) + fabs(fabs(filteredZ))) / 3.0f;
+            float avgAbsAccel_raw = (fabs(accelX) + fabs(accelY) + fabs(fabs(accelZ))) / 3.0f;
 
             // add to queue (both raw and filtered values)
             xMessage.ulTimeStamp = xTaskGetTickCount();
             xMessage.uFiltered = avgAbsAccel;
             xMessage.uRaw = avgAbsAccel_raw;
-            if (xQueueSend(xBMIQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
-            {
-                UARTprintf("Data sent to queue: %d.%d\n", (int)avgAbsAccel,(int)(avgAbsAccel * 100) % 100);
-            }
-            else
-            {
-                UARTprintf("Error: Failed to send data to the queue\n");
-            }
-            // UARTprintf("Acceleration: %d.%d\n", (int)avgAbsAccel,(int)(avgAbsAccel * 100) % 100);
-            //     UARTprintf("Filtered Accel: X: %d, Y: %d, Z: %d\n",
+            // if (xQueueSend(xBMIQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
+            // {
+            //     UARTprintf("Data sent to queue: %d.%d\n", (int)avgAbsAccel,(int)(avgAbsAccel * 100) % 100);
+            // }
+            // else
+            // {
+            //     UARTprintf("Error: Failed to send data to the queue\n");
+            // }
+            UARTprintf("Acceleration: %d.%d\n", (int)avgAbsAccel,(int)(avgAbsAccel * 100) % 100);
+                // UARTprintf("Filtered Accel: X: %d, Y: %d, Z: %d\n",
             //    (int)(filteredX * 1000),
             //    (int)(filteredY * 1000),
             //    (int)(filteredZ * 1000));
