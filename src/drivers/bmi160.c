@@ -21,6 +21,8 @@
  * ------------------------------------------------------------------------------------------------
  */
 
+ extern uint32_t g_ui32SysClock;
+
 /* Slave address */
 #define BMI160_IC2_ADDRESS_GND 0x68   // address if SDO pin is pulled to GND
 #define BMI160_IC2_ADDRESS_VDDIO 0x69 // address if SDO pin is pulled to VDDIO
@@ -80,6 +82,10 @@ bool sensorBMI160Init(void)
         return false;
     }
     vTaskDelay(pdMS_TO_TICKS(150));
+    // Disable Advanced Power Save
+    uint8_t pwr_conf = 0x00;
+    writeI2C_acc(0x69, 0x6C, &pwr_conf, 1);
+    vTaskDelay(pdMS_TO_TICKS(10));
     
 
     // enable accelerometer
@@ -139,22 +145,16 @@ bool sensorBMI160Init(void)
         return false;
     }
 
-    // // enable GPIOP interrupt
-    // GPIOIntEnable(GPIO_PORTP_BASE, GPIO_PIN_3);
+    prvBMI160DataReady();
 
-    // IntEnable(INT_GPIOP3);
-
-    // // enable interrupts
-    // IntMasterEnable();
-
-    uint8_t val1;
-    readI2C(BMI160_IC2_ADDRESS_VDDIO, 0x40, &val1);
-    UARTprintf("ACC_CONF = 0x%02X\n", val1); // Expect 0x28
-    readI2C(BMI160_IC2_ADDRESS_VDDIO, 0x41, &val1);
-    UARTprintf("ACC_RANGE = 0x%02X\n", val1); // Expect 0x03
-    uint8_t pmu;
-    readI2C(BMI160_IC2_ADDRESS_VDDIO, 0x03, &pmu);
-    UARTprintf("PMU_STATUS = 0x%02X\n", pmu);
+    // uint8_t val1;
+    // readI2C(BMI160_IC2_ADDRESS_VDDIO, 0x40, &val1);
+    // UARTprintf("ACC_CONF = 0x%02X\n", val1); // Expect 0x28
+    // readI2C(BMI160_IC2_ADDRESS_VDDIO, 0x41, &val1);
+    // UARTprintf("ACC_RANGE = 0x%02X\n", val1); // Expect 0x03
+    // uint8_t pmu;
+    // readI2C(BMI160_IC2_ADDRESS_VDDIO, 0x03, &pmu);
+    // UARTprintf("PMU_STATUS = 0x%02X\n", pmu);
 
     return true;
 }
@@ -204,23 +204,21 @@ bool sensorBMI160Test(void)
     return true;
 }
 
-// /**************************************************************************************************
-//  * @fn          sensorOpt3001Convert
-//  *
-//  * @brief       Convert raw data to object and ambience temperature
-//  *
-//  * @param       rawData - raw data from sensor
-//  *
-//  * @param       convertedLux - converted value (lux)
-//  *
-//  * @return      none
-//  **************************************************************************************************/
-// void sensorOpt3001Convert(uint16_t rawData, float *convertedLux)
-// {
-// 	uint16_t e, m;
 
-// 	m = rawData & 0x0FFF;
-// 	e = (rawData & 0xF000) >> 12;
+// config BMI160 data ready interrupt on Port P Pin 3
+static void prvBMI160DataReady(void) {
+    // Enable GPIO port for the INT pin
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOD);
 
-// 	*convertedLux = m * (0.01 * exp2(e));
-// }
+    // Configure pull-up resistor?
+    GPIOPinTypeGPIOInput(GPIO_PORTD_BASE, GPIO_PIN_4);
+    GPIOPadConfigSet(GPIO_PORTD_BASE, GPIO_PIN_4, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+
+    // trigger on the falling edge
+    GPIOIntTypeSet(GPIO_PORTD_BASE, GPIO_PIN_4, GPIO_FALLING_EDGE);
+    GPIOIntClear(GPIO_PORTD_BASE, GPIO_PIN_4);
+    // enable GPIOP interrupt
+    GPIOIntEnable(GPIO_PORTD_BASE, GPIO_PIN_4);
+
+    IntEnable(INT_GPIOD);
+}

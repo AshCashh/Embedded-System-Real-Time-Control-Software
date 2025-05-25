@@ -1139,7 +1139,6 @@ static void prvDisplayTask(void *pvParameters)
     //
     for (;;)
     {
-
         // block until ISR gives semaphore
         if (xSemaphoreTake(xSemaphoreTimer0, portMAX_DELAY) == pdTRUE)
         {
@@ -1178,6 +1177,7 @@ static void prvDisplayTask(void *pvParameters)
         }
     }
 }
+
 static void vSensorData(uint32_t *data, int dataSize, PlotType plotType)
 {
     // Plot area

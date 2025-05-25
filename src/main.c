@@ -132,15 +132,15 @@ EventGroupHandle_t xEventGroup = NULL;
 int main( void )
 {
     /* Prepare hardware */
-    prvSetupHardware();
     /* Create the event group */
-    xEventGroup = xEventGroupCreate();
-    UARTprintf("Starting System\n");
-    if (xEventGroup == NULL)
-    {
-        UARTprintf("Failed to create Event Group\n");
+    // xEventGroup = xEventGroupCreate();
+    prvSetupHardware();
+    UARTprintf("[S]     Starting System\n");
+    // if (xEventGroup == NULL)
+    // {
+    //     UARTprintf("Failed to create Event Group\n");
     
-    }
+    // }
     
     /* Create the queue used to send complete struct AMessage structures.  This can
     also be created after the schedule starts, but care must be task to ensure
@@ -187,11 +187,13 @@ int main( void )
 
     if ( xButton1Semaphore != NULL && xButton2Semaphore != NULL && xIC2MasterSemaphore != NULL && xSampleLightSemaphore != NULL && xI2CMutex != NULL)
     {
-        /* Configure application specific hardware and initialize the task thread. */
         taskENTER_CRITICAL();
+        /* Configure application specific hardware and initialize the task thread. */
         vCreateLightSensorTask();
         vCreateDisplayTask();
         vCreateAccelTask();
+        /* Start the tasks and timer running. */
+        vTaskStartScheduler();
         taskEXIT_CRITICAL();
         UARTprintf("    Tasks Created\n");
     }
@@ -199,8 +201,6 @@ int main( void )
         UARTprintf("Semaphore creation failed\n");
     }
 
-    /* Start the tasks and timer running. */
-    vTaskStartScheduler();
 
     /* If all is well, the scheduler will now be running, and the following
     line will never be reached.  If the following line does execute, then
@@ -234,23 +234,23 @@ static void prvConfigSMBusINT(void) {
 }
 
 
-// config BMI160 data ready interrupt on Port P Pin 3
-static void prvBMI160DataReady(void) {
-    // Enable GPIO port for the INT pin
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOD);
+// // config BMI160 data ready interrupt on Port P Pin 3
+// static void prvBMI160DataReady(void) {
+//     // Enable GPIO port for the INT pin
+//     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOD);
 
-    // Configure pull-up resistor?
-    GPIOPinTypeGPIOInput(GPIO_PORTD_BASE, GPIO_PIN_4);
-    GPIOPadConfigSet(GPIO_PORTD_BASE, GPIO_PIN_4, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+//     // Configure pull-up resistor?
+//     GPIOPinTypeGPIOInput(GPIO_PORTD_BASE, GPIO_PIN_4);
+//     GPIOPadConfigSet(GPIO_PORTD_BASE, GPIO_PIN_4, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
 
-    // trigger on the falling edge
-    GPIOIntTypeSet(GPIO_PORTD_BASE, GPIO_PIN_4, GPIO_FALLING_EDGE);
-    GPIOIntClear(GPIO_PORTD_BASE, GPIO_PIN_4);
-    // enable GPIOP interrupt
-    GPIOIntEnable(GPIO_PORTD_BASE, GPIO_PIN_4);
+//     // trigger on the falling edge
+//     GPIOIntTypeSet(GPIO_PORTD_BASE, GPIO_PIN_4, GPIO_FALLING_EDGE);
+//     GPIOIntClear(GPIO_PORTD_BASE, GPIO_PIN_4);
+//     // enable GPIOP interrupt
+//     GPIOIntEnable(GPIO_PORTD_BASE, GPIO_PIN_4);
 
-    IntEnable(INT_GPIOD);
-}
+//     IntEnable(INT_GPIOD);
+// }
 
 // config UART
 static void prvConfigureUART(void)
@@ -276,7 +276,7 @@ static void prvConfigureUART(void)
     GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_1);
 
     /* Initialize the UART for console I/O. */
-    UARTStdioConfig(0, 9600, 16000000);
+    UARTStdioConfig(0, 9600, 16000000); 
     SysCtlDelay(g_ui32SysClock); // ~1 second delay at 120MHz to ensure UART initialises before using UARTprintf
 }
 
@@ -388,12 +388,13 @@ static void prvSetupHardware( void )
     prvDisplayInit();
     prvConfigureUART();
     prvConfigureI2C();
-    prvBMI160DataReady();
+    // prvBMI160DataReady();
     // prvConfigSMBusINT();
     //prvConfigureHWTimer();
     prvConfigureHWTimer(); // timer 0 A
 }
 /*-----------------------------------------------------------*/
+
 
 void vApplicationMallocFailedHook( void )
 {
