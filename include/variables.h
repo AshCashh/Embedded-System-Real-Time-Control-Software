@@ -108,7 +108,9 @@ typedef struct
     bool brake; /* brake flag */
     uint8_t stall_counter; /* reactivation count */
     uint32_t rpm; /* current rpm value */
-    uint32_t acceleration; /* current acceleration value */
+    int32_t acceleration; /* current acceleration value */
     uint32_t hall_sensor_values[3]; /* hall sensor values */
+    /* timestamp */
+    uint32_t timestamp; /* timestamp for hall sensor */
 } motorcontrol_t;
 

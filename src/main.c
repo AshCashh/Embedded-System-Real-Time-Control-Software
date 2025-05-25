@@ -66,6 +66,7 @@
 #include "driverlib/rom_map.h"
 #include "driverlib/sysctl.h"
 #include "driverlib/uart.h"
+#include "driverlib/adc.h"
 #include "drivers/rtos_hw_drivers.h"
 #include "utils/uartstdio.h"
 #include "driverlib/gpio.h"
@@ -96,17 +97,25 @@ extern void vCreateMotorTask( void );
 static void prvConfigureHallInts( void );
 
 static void prvConfigureHWTimer(void);
+
+static void prvConfigureADCInts( void );
+
+extern void xTimerHandler(void);
+
 /*-----------------------------------------------------------*/
 /*
     Initialises sempahores
 */
 SemaphoreHandle_t xButtonSemaphore = NULL;
 SemaphoreHandle_t xCountTimerSemaphore = NULL;
-
+SemaphoreHandle_t xI2CMasterSemaphore = NULL;
+SemaphoreHandle_t xHallSensorSemaphore = NULL;
 int main( void )
 {   
     xButtonSemaphore = xSemaphoreCreateBinary();
     xCountTimerSemaphore = xSemaphoreCreateBinary();
+    xI2CMasterSemaphore = xSemaphoreCreateBinary();
+    xHallSensorSemaphore = xSemaphoreCreateBinary();
     motor_ctrl.mutex = xSemaphoreCreateMutex();
     motor_ctrl.pwm = 25;
     motor_ctrl.period_value = 50;
@@ -171,6 +180,8 @@ static void prvSetupHardware(void)
     prvConfigureUART();
     
     /* Configure motor pins */
+    /* Configure ADC1 with ISENCE pins */
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC1);
     /* Enable GPIO ports for motor phases */
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOG);
@@ -189,8 +200,8 @@ static void prvSetupHardware(void)
             !SysCtlPeripheralReady(SYSCTL_PERIPH_GPION) ||
             !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA) ||
             !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOD) ||
-            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOE));
-
+            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOE) ||
+            !SysCtlPeripheralReady(SYSCTL_PERIPH_ADC1));
     /* Configure phase pins as outputs */
     GPIOPinTypeGPIOOutput(INLA);
     GPIOPinTypeGPIOOutput(INHB);
@@ -212,7 +223,8 @@ static void prvSetupHardware(void)
     GPIOPinWrite(INHC, 0);
     /* Set-up interrupts for hall sensors */
     prvConfigureHallInts();
-
+    /* Set-up adc interrupts for current measurements */
+    // prvConfigureADCInts();
 
 }
 /*-----------------------------------------------------------*/
@@ -231,6 +243,10 @@ void vApplicationMallocFailedHook( void )
     provide information on how the remaining heap might be fragmented). */
     IntMasterDisable();
     for( ;; );
+}
+static void prvConfigureADCInts( void )
+{
+
 }
 /*-----------------------------------------------------------*/
 static void prvConfigureHallInts( void )
@@ -303,7 +319,8 @@ static void prvConfigureHWTimer(void)
 
     /* Enable global interrupts in the NVIC. */
     IntMasterEnable();
-
+    /* Register the Timer 0A interrupt handler. */
+    TimerIntRegister(TIMER0_BASE, TIMER_A, xTimerHandler);
     //
     // Start the timer used in this example Task
     // You may need change where this timer is enabled
@@ -345,5 +362,3 @@ void *malloc( size_t xSize )
     for( ;; );
 }
 /*-----------------------------------------------------------*/
-
-

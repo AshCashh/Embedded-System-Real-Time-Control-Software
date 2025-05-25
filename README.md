@@ -47,3 +47,12 @@ $$I_{\text{SOx}} = \frac{1.65 - V_{\text{SOx}}}{0.7} $$
 **University:** Queensland University of Technology (QUT)
 
 page 31 drv8323 for motors
+
+
+## Motor todo list 
+[] Desired rpm
+[] Control loop
+[] Within deceleration and acceleration spec
+[] E-stop
+[] Event queue trigger for conditions
+[] Current sensing

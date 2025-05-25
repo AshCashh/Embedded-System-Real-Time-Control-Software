@@ -60,6 +60,7 @@
 #include "semphr.h"
 
 /* Hardware includes. */
+#include "math.h"
 #include "inc/hw_ints.h"
 #include "inc/hw_memmap.h"
 #include "inc/hw_gpio.h"
@@ -74,8 +75,33 @@
 #include "variables.h"
 #include "motorlib.h"
 
-#define BUTTON_DUTY_INCREMENT 5
+#define BUTTON_DUTY_INCREMENT 5 
+#define AVERAGE_SAMPLES 60
 
+/*
+    * Convert a tick delta to RPM.
+    * The tick delta is the time in ticks between two hall sensor readings.
+    * The formula is based on the fact that 1 minute = 60 seconds = 60000 milliseconds.
+    * Tick delta is converted to milliseconds, then multiplied by 8 as there are 8 
+    * ticks for one revolution of the motor including the initial and final states
+*/
+static inline uint32_t tickdelta_to_rpm(uint32_t tickdelta)
+{
+    return (60000 / ((tickdelta * portTICK_PERIOD_MS) << 3));
+}
+/*
+    * Convert a RPM delta to acceleration in RPM/s.
+    * The formula is based on the fact that 1 second = 1000 milliseconds.
+    * The RPM delta is the change in RPM over the tick delta.
+    * The formula is:
+    * acceleration = (RPM delta * 1000) / (tick delta in milliseconds)
+*/
+static inline float rpmdelta_to_accel(int32_t rpmdelta, int32_t tickdelta)
+{
+    float period = (tickdelta * portTICK_PERIOD_MS);
+    float acceleration = ((int32_t)rpmdelta * 1000) / period; // convert to RPM/s
+    return acceleration;
+}
 extern motorcontrol_t motor_ctrl;
 
 static int count = 0;
@@ -90,12 +116,15 @@ extern volatile uint32_t g_ui32SysClock;
 /*Semaphores intialised in main*/
 extern SemaphoreHandle_t xButtonSemaphore;
 extern SemaphoreHandle_t xCountTimerSemaphore;
+extern SemaphoreHandle_t xHallSensorSemaphore;
+QueueHandle_t xMotorTimestampQueue;
 
 /*
  * Global variable to log the last GPIO button pressed.
  */
 volatile static uint32_t g_pui32ButtonPressed = NULL;
 
+void ADCIntHandler(void);
 void HallSensorHandler(void);
 /*-----------------------------------------------------------*/
 
@@ -134,6 +163,7 @@ void vCreateMotorTask(void)
      *  - The priority assigned to the task.
      *  - The task handle is NULL */
 
+    xMotorTimestampQueue = xQueueCreate(10, sizeof(uint32_t));
     xTaskCreate(prvMotorTask,
                 "MotorTask",
                 configMINIMAL_STACK_SIZE,
@@ -232,6 +262,8 @@ static void prvMotorTask(void *pvParameters)
             rpm = motor_ctrl.rpm;
             acceleration = motor_ctrl.acceleration;
             motor_enabled = motor_ctrl.motor_enabled;
+            // printMotorStatus(&motor_ctrl);
+            UARTprintf("%d\n");
             xSemaphoreGive(motor_ctrl.mutex);
         }
 
@@ -250,7 +282,7 @@ static void prvMotorTask(void *pvParameters)
                 UARTprintf("INVALID DUTY_CYCLE\n");
                 break;
             }
-            UARTprintf("\rDuty cycle: %d  PWM:%d  RPM: %d  Acceleration(RPM/s): %d   ", duty_value,pwm,rpm,acceleration);
+            // UARTprintf("\rDuty cycle: %d  PWM:%d  RPM: %d  Acceleration(RPM/s): %d   ", duty_value,pwm,rpm,acceleration);
         }
         else
         {
@@ -369,50 +401,91 @@ static void prvButtonTask(void *pvParameters)
     }
 }
 
-static void prvMotorCalcTask(void *pvParameters)
-{   
-    /* Motor calculation task 
-        * This task is responsible for calculating the motor speed and acceleration
-        * based on the hall sensor readings. It also handles stall detection and
-        * re-enables the motor if it has stalled.
-        *
-        * The task runs in an infinite loop, waiting for the xCountTimerSemaphore
-        * to be given by the timer interrupt handler.
-    */
+// static void prvMotorCalcTask(void *pvParameters)
+// {   
+//     /* Motor calculation task 
+//         * This task is responsible for calculating the motor speed and acceleration
+//         * based on the hall sensor readings. It also handles stall detection and
+//         * re-enables the motor if it has stalled.
+//         *
+//         * The task runs in an infinite loop, waiting for the xCountTimerSemaphore
+//         * to be given by the timer interrupt handler.
+//     */
+//     for (;;)
+//     {
+//         if (xSemaphoreTake(xCountTimerSemaphore, portMAX_DELAY) == pdTRUE)
+//         {
+//             if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
+//             {
+//                 taskENTER_CRITICAL();
+//                 uint32_t old_rpm = motor_ctrl.rpm;
+//                 motor_ctrl.rpm = COUNT_TO_RPM(count);
+//                 motor_ctrl.acceleration = (motor_ctrl.rpm - old_rpm) * COUNT_REFRESH_RATE_HZ;
+//                 if ((motor_ctrl.stall_counter < STALL_VAL) && (motor_ctrl.rpm == 0))
+//                 {
+//                     // UARTprintf("Motor Stalling\n");
+//                     motor_ctrl.stall_counter++;
+//                 }
+//                 else if (motor_ctrl.rpm > 0)
+//                 {
+//                     motor_ctrl.stall_counter = 0;
+//                 }
+//                 else if (motor_ctrl.stall_counter >= STALL_VAL)
+//                 {
+
+//                     // UARTprintf("Motor Stalled\n");
+//                     motor_ctrl.motor_enabled = false;
+//                     motor_ctrl.stall_counter = STALL_VAL+1;
+//                     disableMotor();
+//                 }
+
+//                 count = 0;
+//                 taskEXIT_CRITICAL();
+//                 xSemaphoreGive(motor_ctrl.mutex);
+//             }
+//             // UARTprintf("IN Task\n");
+//         }
+//     }
+// }
+
+static void prvMotorCalcTask( void* parameters )
+{
+    int32_t timestamp = 0;
+    int32_t timestamp_prev = 0;
+    uint32_t timestamp_last_update = 0;
+    int32_t rpm_avg = 0;
+    int32_t rpm_prev = 0;
+    float acceleration = 0;
+    int idx = 0;
     for (;;)
     {
-        if (xSemaphoreTake(xCountTimerSemaphore, portMAX_DELAY) == pdTRUE)
+        if (xQueueReceive(xMotorTimestampQueue, &timestamp, portMAX_DELAY) == pdTRUE)
         {
-            if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
+            /* moving average for rpm calcs */
+            if (timestamp_prev > 0)
             {
-                taskENTER_CRITICAL();
-                uint32_t old_rpm = motor_ctrl.rpm;
-                motor_ctrl.rpm = COUNT_TO_RPM(count);
-                motor_ctrl.acceleration = (motor_ctrl.rpm - old_rpm) * COUNT_REFRESH_RATE_HZ;
-                if ((motor_ctrl.stall_counter < STALL_VAL) && (motor_ctrl.rpm == 0))
+                rpm_avg += tickdelta_to_rpm(timestamp - timestamp_prev);
+                idx++;
+                if (idx >= AVERAGE_SAMPLES)
                 {
-                    // UARTprintf("Motor Stalling\n");
-                    motor_ctrl.stall_counter++;
+                    rpm_avg /= AVERAGE_SAMPLES;
+                    acceleration = rpmdelta_to_accel(rpm_avg - rpm_prev, timestamp - timestamp_last_update);
+                    /* update shared data struct */
+                    idx = 0;
+                    rpm_prev = rpm_avg;
+                    if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
+                    {
+                        motor_ctrl.rpm = rpm_avg;
+                        motor_ctrl.acceleration = acceleration;
+                        motor_ctrl.timestamp = timestamp_last_update;
+                        xSemaphoreGive(motor_ctrl.mutex);
+                    }
+                    timestamp_last_update = timestamp;
                 }
-                else if (motor_ctrl.rpm > 0)
-                {
-                    motor_ctrl.stall_counter = 0;
-                }
-                else if (motor_ctrl.stall_counter >= STALL_VAL)
-                {
-
-                    // UARTprintf("Motor Stalled\n");
-                    motor_ctrl.motor_enabled = false;
-                    motor_ctrl.stall_counter = STALL_VAL+1;
-                    disableMotor();
-                }
-
-                count = 0;
-                taskEXIT_CRITICAL();
-                xSemaphoreGive(motor_ctrl.mutex);
             }
-            // UARTprintf("IN Task\n");
+            timestamp_prev = timestamp;
         }
+            
     }
 }
 /*-----------------------------------------------------------*/
@@ -426,6 +499,7 @@ void HallSensorHandler(void)
     * It clears the interrupt and updates the motor phase based on the hall
     */
     /* Get type of interrupt */
+    BaseType_t xMotorTaskWoken = pdFALSE;
     uint32_t ui32StatusM = GPIOIntStatus(GPIO_PORTM_BASE, true);
     uint32_t ui32StatusH = GPIOIntStatus(GPIO_PORTH_BASE, true);
     uint32_t ui32StatusN = GPIOIntStatus(GPIO_PORTN_BASE, true);
@@ -434,6 +508,15 @@ void HallSensorHandler(void)
     GPIOIntClear(GPIO_PORTM_BASE, ui32StatusM);
     GPIOIntClear(GPIO_PORTH_BASE, ui32StatusH);
     GPIOIntClear(GPIO_PORTN_BASE, ui32StatusN);
+
+    /* trigger interrupt on port m pin 2*/
+    if (ui32StatusM & GPIO_PIN_3)
+    {
+        /* give semaphore */
+        uint32_t timestamp = xTaskGetTickCount();
+        xQueueSendFromISR(xMotorTimestampQueue, &timestamp, NULL);
+        portYIELD_FROM_ISR(xMotorTaskWoken);
+    }
 
     /* Increments the count used by PRVMotorCalc task, this does not need protection as in MotorCalc has a critcal section and motorcalc task cannot preempt interupts*/
     count++;
@@ -491,4 +574,22 @@ void xTimerHandler(void)
     /*give the semaphore*/
     xSemaphoreGiveFromISR(xCountTimerSemaphore, &xCountTaskWoken);
     portYIELD_FROM_ISR(xCountTaskWoken);
+}
+
+void ADCIntHandler(void)
+{
+    /*
+    * ADC interrupt handler
+    * This function is called when the ADC interrupt is triggered.
+    * It clears the interrupt and reads the ADC values.
+    */
+    BaseType_t xMotorTaskWoken = pdFALSE;
+
+    /* Clear the ADC interrupt */
+    ADCIntClear(ADC0_BASE, 0);
+
+    /* Read the ADC values */
+    uint32_t adc_value = ADCSequenceDataGet(ADC0_BASE, 0, &adc_value);
+    UARTprintf("ADC Value: %d\n", adc_value);
+    portYIELD_FROM_ISR(xMotorTaskWoken);
 }
