@@ -1,5 +1,8 @@
 {
     "files.associations": {
-        "motorlib.h": "c"
+        "motorlib.h": "c",
+        "limits": "c",
+        "type_traits": "c",
+        "cmath": "c"
     }
 }

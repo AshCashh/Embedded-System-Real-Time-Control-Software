@@ -96,26 +96,26 @@ extern void vCreateMotorTask( void );
 
 static void prvConfigureHallInts( void );
 
-static void prvConfigureHWTimer(void);
-
-static void prvConfigureADCInts( void );
+static void prvConfigurePIDTimer(void);
 
 extern void xTimerHandler(void);
+
+extern void xPIDTimerHandler(void);
 
 /*-----------------------------------------------------------*/
 /*
     Initialises sempahores
 */
 SemaphoreHandle_t xButtonSemaphore = NULL;
-SemaphoreHandle_t xCountTimerSemaphore = NULL;
+SemaphoreHandle_t xPIDTimerSemaphore = NULL;
 SemaphoreHandle_t xI2CMasterSemaphore = NULL;
-SemaphoreHandle_t xHallSensorSemaphore = NULL;
+SemaphoreHandle_t xCountMutex = NULL;
 int main( void )
 {   
     xButtonSemaphore = xSemaphoreCreateBinary();
-    xCountTimerSemaphore = xSemaphoreCreateBinary();
+    xPIDTimerSemaphore = xSemaphoreCreateBinary();
     xI2CMasterSemaphore = xSemaphoreCreateBinary();
-    xHallSensorSemaphore = xSemaphoreCreateBinary();
+    xCountMutex = xSemaphoreCreateMutex();
     motor_ctrl.mutex = xSemaphoreCreateMutex();
     motor_ctrl.pwm = 25;
     motor_ctrl.period_value = 50;
@@ -126,7 +126,7 @@ int main( void )
 
     /* Create the Hello task to output a message over UART. */
     vCreateMotorTask();
-    prvConfigureHWTimer();
+    prvConfigurePIDTimer();
 
     /* Start the tasks and timer running. */
     vTaskStartScheduler();
@@ -244,10 +244,6 @@ void vApplicationMallocFailedHook( void )
     IntMasterDisable();
     for( ;; );
 }
-static void prvConfigureADCInts( void )
-{
-
-}
 /*-----------------------------------------------------------*/
 static void prvConfigureHallInts( void )
 {
@@ -299,34 +295,24 @@ static void prvConfigureHallInts( void )
     IntMasterEnable();
 }
 
-/*-----------------------------------------------------------*/
-static void prvConfigureHWTimer(void)
+static void prvConfigurePIDTimer(void)
 {
-    /* The Timer 0 peripheral must be enabled for use. */
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER0);
-
-    /* Configure Timer 0 in full-width periodic mode. */
-    TimerConfigure(TIMER0_BASE, TIMER_CFG_PERIODIC);
-
-    /* Set the Timer 0A load value to run at generall 10 hz. check the variable function to know*/
-    TimerLoadSet(TIMER0_BASE, TIMER_A, (g_ui32SysClock/COUNT_REFRESH_RATE_HZ)); // 100 ms
-
-    /* Configure the Timer 0A interrupt for timeout. */
-    TimerIntEnable(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
-
-    /* Enable the Timer 0A interrupt in the NVIC. */
-    IntEnable(INT_TIMER0A);
-
+    /* Use Timer 2A in full width periodic mode at 100hz */
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER2);
+    TimerConfigure(TIMER2_BASE, TIMER_CFG_PERIODIC);
+    TimerLoadSet(TIMER2_BASE, TIMER_A, (g_ui32SysClock/PID_FREQUENCY)); // 10 ms
+    /* Configure the Timer 2A interrupt for timeout. */
+    TimerIntEnable(TIMER2_BASE, TIMER_TIMA_TIMEOUT);
+    /* Enable the Timer 2A interrupt in the NVIC. */
+    IntEnable(INT_TIMER2A);
     /* Enable global interrupts in the NVIC. */
     IntMasterEnable();
-    /* Register the Timer 0A interrupt handler. */
-    TimerIntRegister(TIMER0_BASE, TIMER_A, xTimerHandler);
-    //
-    // Start the timer used in this example Task
-    // You may need change where this timer is enabled
-    //
-    TimerEnable(TIMER0_BASE, TIMER_A);
+    /* Register the Timer 2A interrupt handler. */
+    TimerIntRegister(TIMER2_BASE, TIMER_A, xPIDTimerHandler);
+    /* Start the timer used in this example Task */
+    TimerEnable(TIMER2_BASE, TIMER_A);
 }
+
 void vApplicationIdleHook( void )
 {
     /* vApplicationIdleHook() will only be called if configUSE_IDLE_HOOK is set

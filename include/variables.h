@@ -54,19 +54,27 @@
 
 
 
-#define COUNT_REFRESH_RATE_HZ 2
+#define PID_FREQUENCY 80   //Hz
 
-#define STALL_VAL STALL_DURATION*COUNT_REFRESH_RATE_HZ
+#define STALL_VAL STALL_DURATION*PID_FREQUENCY
 
 #define COUNT_PER_REVOLUTION 24
+
 #define SECONDS_PER_MINUTE 60
 
-#define COUNT_TO_RPM(count) \
-    ((count/COUNT_PER_REVOLUTION)*COUNT_REFRESH_RATE_HZ*SECONDS_PER_MINUTE) 
+static inline float count_to_rpm(int count)
+{
+    return ((float)count / COUNT_PER_REVOLUTION) * PID_FREQUENCY * SECONDS_PER_MINUTE;
+}
 
-
-
-
+/* PID variables */
+#define Kp 0.0012 /* Proportional gain */
+#define Kd 0.0006 /* Derivative gain */
+#define Ki 0.038  /* Integral gain */
+#define dt 1/PID_FREQUENCY // 10 ms
+#define clamp(value, min, max) \
+    ((value < min) ? min : ((value > max) ? max : value))
+#define BUTTON_RPM_INCREMENT 100 // RPM increment for button press
 /* 
     Commutation phases for 3 phase BLDC with INHC = 1
     Phase F loops back to phase A per revolution 
@@ -100,7 +108,7 @@
 typedef struct
 {
     SemaphoreHandle_t mutex; /* mutex for controlling access */
-    uint16_t pwm; /* PWM percentage 0-100 */
+    float pwm; /* PWM percentage 0-100 */
     volatile uint16_t duty_value; /* current duty cycle value */
     uint16_t period_value; /* current period value */
     uint32_t hall_currents[3]; /* hall sensor currents */
@@ -108,6 +116,7 @@ typedef struct
     bool brake; /* brake flag */
     uint8_t stall_counter; /* reactivation count */
     uint32_t rpm; /* current rpm value */
+    uint32_t target_rpm; /* target rpm value */
     int32_t acceleration; /* current acceleration value */
     uint32_t hall_sensor_values[3]; /* hall sensor values */
     /* timestamp */
