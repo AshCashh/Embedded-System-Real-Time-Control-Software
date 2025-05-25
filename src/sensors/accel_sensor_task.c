@@ -160,7 +160,7 @@ void vCreateAccelTask(void)
 
     xTaskCreate(prvAccelTask,
                 "Accel Task",
-                configMINIMAL_STACK_SIZE,
+                configMINIMAL_STACK_SIZE, // Increased stack size for BMI160 operations
                 NULL,
                 tskIDLE_PRIORITY +1,
                 NULL);
@@ -270,10 +270,10 @@ static void prvAccelTask(void *pvParameters)
             // add to queue (both raw and filtered values)
             xMessage.ulTimeStamp = xTaskGetTickCount();
             xMessage.uFiltered = avgAbsAccel;
-            xMessage.uRaw = avgAbsAccel_raw;
+            xMessage.uRaw = (uint32_t)(avgAbsAccel_raw * 100); 
             if (xQueueSend(xAccelQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
             {
-                UARTprintf("Data sent to queue: %d.%d\n", (int)avgAbsAccel,(int)(avgAbsAccel * 100) % 100);
+                UARTprintf("Accel sent: %lu\n", xMessage.uRaw);
             }
             else
             {

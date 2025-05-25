@@ -1205,29 +1205,31 @@ static void prvDisplayTask(void *pvParameters)
                 g_ui32LightDataIndex = (g_ui32LightDataIndex + 1) % LIGHT_DATA_BUFFER_SIZE;
                 if (g_ui32LightDataCount < LIGHT_DATA_BUFFER_SIZE)
                     g_ui32LightDataCount++;
+                // print the buffer recieved data
+                //uint32_t prevIndex = (g_ui32LightDataIndex == 0) ? (LIGHT_DATA_BUFFER_SIZE - 1) : (g_ui32LightDataIndex - 1);
+                //UARTprintf("Light Data: %d, Count: %d\n", g_ui32LightDataBuffer[prevIndex], g_ui32LightDataCount); 
 
                 vSensorData(g_ui32LightDataBuffer, g_ui32LightDataCount, PLOT_LIGHT);
             }
             else{
-                 UARTprintf("No Light Data received\n");
+                 //UARTprintf("No Light Data received\n");
             }
         }
         if (g_ui32Panel == 2 && g_eCurrentPlot == PLOT_ACCEL && g_bAccelPlotEnabled){
             if (xQueueReceive(xAccelQueue, &(xRxedStructure), (TickType_t)10) == pdPASS)
             {
-                // Assuming xRxedStructure.uRaw contains acceleration data
                 g_ui32AccelDataBuffer[g_ui32AccelDataIndex] = xRxedStructure.uRaw;
                 g_ui32AccelDataIndex = (g_ui32AccelDataIndex + 1) % ACCEL_DATA_BUFFER_SIZE;
-                // print raw data
-                UARTprintf("Accel Data: %d\n", xRxedStructure.uRaw);
+                //UARTprintf("Accel Data: %d, Count: %d\n", g_ui32AccelDataBuffer[g_ui32AccelDataIndex], g_ui32AccelDataCount);
+                uint32_t prevIndex = (g_ui32AccelDataIndex == 0) ? (ACCEL_DATA_BUFFER_SIZE - 1) : (g_ui32AccelDataIndex - 1);
+                UARTprintf("Accel Data: %d, Count: %d\n", g_ui32AccelDataBuffer[prevIndex], g_ui32AccelDataCount);
+               
                 if (g_ui32AccelDataCount < ACCEL_DATA_BUFFER_SIZE)
                     g_ui32AccelDataCount++;
-                vSensorData(g_ui32AccelDataBuffer, g_ui32AccelDataIndex, PLOT_ACCEL);
+                vSensorData(g_ui32AccelDataBuffer, g_ui32AccelDataCount, PLOT_ACCEL);
             }
             else{
-                //UARTprintf("No Accel Data received\n");
-                //UARTprintf("Accel Data2: %d\n", xRxedStructure.uRaw);
-
+                //UARTprintf("Accel Data2: %d\n", g_ui32AccelDataBuffer[g_ui32AccelDataIndex]);
             }
         }
     }
@@ -1257,7 +1259,7 @@ static void vSensorData(uint32_t *data, int dataSize, PlotType plotType)
         break;
     case PLOT_ACCEL:
         yMin = 0;
-        yMax = 500; // not sure what the max accel value is, so using 500 as a placeholder
+        yMax = 2000; // not sure what the max accel value is, so using 500 as a placeholder
         yScale = 1; 
         yLabel = "g";
         break;

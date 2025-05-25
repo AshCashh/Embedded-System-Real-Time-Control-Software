@@ -170,9 +170,15 @@ int main( void )
         pointer. */
         sizeof(AMessage));
 
-    if ((xLightQueue == NULL) || (xPointerQueue == NULL))
+    if ((xLightQueue == NULL) || (xPointerQueue == NULL) || (xAccelQueue == NULL))
     {
+        UARTprintf("Queue creation failed\n");
     }
+    else
+    {
+        UARTprintf("Queues Created\n");
+    }
+ 
 
     /* Create the binary semaphore used to synchronize the button ISR and the
      * button processing task. */
