@@ -75,8 +75,10 @@
 #include "drivers/touch.h"
 #include "images.h"
 #include "driverlib/timer.h"
+#include "includes/common.h"
 #include "includes/motor.h"
 #include "includes/light_sensor_task.h"
+#include "includes/accel_sensor_task.h"
 #include "includes/shared_variables.h"
 /*-----------------------------------------------------------*/
 #include <stdbool.h>
@@ -102,8 +104,15 @@ typedef enum
 #define LIGHT_DATA_BUFFER_SIZE 100
 uint32_t g_ui32LightDataBuffer[LIGHT_DATA_BUFFER_SIZE] = {0};
 uint32_t g_ui32LightDataIndex = 0;
-volatile PlotType g_eCurrentPlot = PLOT_LIGHT;
-uint32_t g_ui32LightDataCount = 0; // Add this global variable
+volatile PlotType g_eCurrentPlot;
+
+#define ACCEL_DATA_BUFFER_SIZE 100
+uint32_t g_ui32AccelDataBuffer[ACCEL_DATA_BUFFER_SIZE] = {0};
+uint32_t g_ui32AccelDataIndex = 0;
+
+
+uint32_t g_ui32LightDataCount = 0; 
+uint32_t g_ui32AccelDataCount = 0;
 
 extern tCanvasWidget g_sCanvas3;
 extern tCanvasWidget g_sCanvas1;
@@ -128,7 +137,7 @@ volatile uint8_t timer_seconds;
 char time_string[MAX_TIME_LENGTH];
 char date[MAX_DATE_LENGTH];
 volatile bool g_bLightPlotEnabled = false;
-
+volatile bool g_bAccelPlotEnabled = false;
 //*****************************************************************************
 //
 // The DMA control structure table.
@@ -327,13 +336,13 @@ tSliderWidget g_psLimitSliders[] = {
                  20, 130, 280, 30, 0, 20, 5,
                  (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
                  ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
-                 &g_sFontCm20, "5 g", 0, 0, OnLimitSliderChange),
+                 &g_sFontCm20, "5 Rpm/s", 0, 0, OnLimitSliderChange),
     // Acceleration Upper Limit
     SliderStruct(g_psPanels + 1, 0, 0, &g_sKentec320x240x16_SSD2119,
                  20, 160, 280, 30, 0, 20, 15,
                  (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
                  ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
-                 &g_sFontCm20, "15 g", 0, 0, OnLimitSliderChange),
+                 &g_sFontCm20, "15 Rpm/s", 0, 0, OnLimitSliderChange),
 };
 
 tCanvasWidget g_sLimitSlidersCanvas = CanvasStruct(
@@ -372,13 +381,13 @@ void OnLimitSliderChange(tWidget *psWidget, int32_t i32Value)
     else if (psWidget == (tWidget *)&g_psLimitSliders[2])
     {
         Motor.acceleration_limit.lower = i32Value;
-        usprintf(pcText, "Min: %d g", i32Value);
+        usprintf(pcText, "Min: %d Rpm/s", i32Value);
         SliderTextSet(&g_psLimitSliders[2], pcText);
     }
     else if (psWidget == (tWidget *)&g_psLimitSliders[3])
     {
         Motor.acceleration_limit.upper = i32Value;
-        usprintf(pcText, "Max: %d g", i32Value);
+        usprintf(pcText, "Max: %d Rpm/s", i32Value);
         SliderTextSet(&g_psLimitSliders[3], pcText);
     }
     WidgetPaint(psWidget);
@@ -535,6 +544,7 @@ void OnPlotSelectButton(tWidget *psWidget)
     PushButtonFillColorSet(&g_sPlotBtnPower, ClrGray);
 
     g_bLightPlotEnabled = false; // Default: plotting disabled
+    g_bAccelPlotEnabled = false; // Default: plotting disabled
 
     if (psWidget == (tWidget *)&g_sPlotBtnLight)
     {
@@ -564,7 +574,25 @@ void OnPlotSelectButton(tWidget *psWidget)
     {
         g_eCurrentPlot = PLOT_ACCEL;
         PushButtonFillColorSet(&g_sPlotBtnAccel, ClrYellow);
-        // (reset accel buffer here if you add it)
+        
+        // Reset buffer and index for new plot
+        for (uint32_t i = 0; i < ACCEL_DATA_BUFFER_SIZE; i++)
+            g_ui32AccelDataBuffer[i] = 0;
+        g_ui32AccelDataIndex = 0;
+        g_ui32AccelDataCount = 0;
+
+        g_bAccelPlotEnabled = true; // Enable plotting for light
+
+        // Draw axes and labels immediately
+        tRectangle sRect = {10, 40, 310, 180};
+        GrContextForegroundSet(&sContext, ClrBlack);
+        GrRectFill(&sContext, &sRect);
+        GrContextForegroundSet(&sContext, ClrWhite);
+        GrLineDraw(&sContext, 10, 180, 310, 180); // X-axis
+        GrLineDraw(&sContext, 10, 40, 10, 180);   // Y-axis
+
+
+        
     }
     else if (psWidget == (tWidget *)&g_sPlotBtnRPM)
     {
@@ -931,10 +959,11 @@ void OnMotorPanelPaint(tWidget *psWidget, tContext *psContext)
 //*****************************************************************************
 void OnCanvasPaint(tWidget *psWidget, tContext *psContext)
 {
+    tRectangle sRect = {10, 40, 310, 180};
     if (g_eCurrentPlot == PLOT_LIGHT && g_ui32LightDataCount == 0)
     {
         // Draw axes and labels only
-        tRectangle sRect = {10, 40, 310, 180};
+        
         GrContextForegroundSet(psContext, ClrBlack);
         GrRectFill(psContext, &sRect);
         GrContextForegroundSet(psContext, ClrWhite);
@@ -943,6 +972,15 @@ void OnCanvasPaint(tWidget *psWidget, tContext *psContext)
         // GrContextFontSet(psContext, g_psFontFixed6x8);
         // GrStringDraw(psContext, "Time", -1, 160, 192, false);
         // GrStringDraw(psContext, "Lux", -1, 4, 30, false);
+    }
+    if (g_eCurrentPlot == PLOT_ACCEL && g_ui32AccelDataCount == 0)
+    {
+        // Draw axes and labels only
+        GrContextForegroundSet(psContext, ClrBlack); // Use black, not pink
+        GrRectFill(psContext, &sRect);
+        GrContextForegroundSet(psContext, ClrWhite); // Use white for axes
+        GrLineDraw(psContext, 10, 180, 310, 180); // X-axis
+        GrLineDraw(psContext, 10, 40, 10, 180);   // Y-axis
     }
 }
 
@@ -1082,11 +1120,6 @@ void OnSliderChange(tWidget *psWidget, int32_t i32Value)
 
 void vCreateDisplayTask(void)
 {
-    if (xStructQueue == NULL)
-    {
-        UARTprintf("Failed to create queue\n");
-        return;
-    }
     /* Create the task as described in the comments at the top of this file.
      *
      * The xTaskCreate parameters in order are:
@@ -1139,6 +1172,7 @@ static void prvDisplayTask(void *pvParameters)
     //
     for (;;)
     {
+
         // block until ISR gives semaphore
         if (xSemaphoreTake(xSemaphoreTimer0, portMAX_DELAY) == pdTRUE)
         {
@@ -1165,7 +1199,7 @@ static void prvDisplayTask(void *pvParameters)
         }
         if (g_ui32Panel == 2 && g_eCurrentPlot == PLOT_LIGHT && g_bLightPlotEnabled)
         {
-            if (xQueueReceive(xStructQueue, &(xRxedStructure), (TickType_t)10) == pdPASS)
+            if (xQueueReceive(xLightQueue, &(xRxedStructure), (TickType_t)10) == pdPASS)
             {
                 g_ui32LightDataBuffer[g_ui32LightDataIndex] = xRxedStructure.uRaw;
                 g_ui32LightDataIndex = (g_ui32LightDataIndex + 1) % LIGHT_DATA_BUFFER_SIZE;
@@ -1174,15 +1208,35 @@ static void prvDisplayTask(void *pvParameters)
 
                 vSensorData(g_ui32LightDataBuffer, g_ui32LightDataCount, PLOT_LIGHT);
             }
+            else{
+                 UARTprintf("No Light Data received\n");
+            }
+        }
+        if (g_ui32Panel == 2 && g_eCurrentPlot == PLOT_ACCEL && g_bAccelPlotEnabled){
+            if (xQueueReceive(xAccelQueue, &(xRxedStructure), (TickType_t)10) == pdPASS)
+            {
+                // Assuming xRxedStructure.uRaw contains acceleration data
+                g_ui32AccelDataBuffer[g_ui32AccelDataIndex] = xRxedStructure.uRaw;
+                g_ui32AccelDataIndex = (g_ui32AccelDataIndex + 1) % ACCEL_DATA_BUFFER_SIZE;
+                // print raw data
+                UARTprintf("Accel Data: %d\n", xRxedStructure.uRaw);
+                if (g_ui32AccelDataCount < ACCEL_DATA_BUFFER_SIZE)
+                    g_ui32AccelDataCount++;
+                vSensorData(g_ui32AccelDataBuffer, g_ui32AccelDataIndex, PLOT_ACCEL);
+            }
+            else{
+                //UARTprintf("No Accel Data received\n");
+                //UARTprintf("Accel Data2: %d\n", xRxedStructure.uRaw);
+
+            }
         }
     }
 }
-
 static void vSensorData(uint32_t *data, int dataSize, PlotType plotType)
 {
     // Plot area
     uint32_t xStart = 10;  // left edge of plot
-    uint32_t yStart = 180; // bottom edge of plot
+    uint32_t yStart = 175; // bottom edge of plot
     uint32_t yTop = 40;    // top edge of plot
     uint32_t xStep = 3;    // Distance between points on the X-axis
     uint32_t plotWidth = 300;
@@ -1203,27 +1257,26 @@ static void vSensorData(uint32_t *data, int dataSize, PlotType plotType)
         break;
     case PLOT_ACCEL:
         yMin = 0;
-        yMax = 20;
-        yScale = 1; // adjust as needed
+        yMax = 500; // not sure what the max accel value is, so using 500 as a placeholder
+        yScale = 1; 
         yLabel = "g";
         break;
     case PLOT_RPM:
         yMin = 0;
         yMax = 2500;
-        yScale = 1; // adjust as needed
+        yScale = 1; 
         yLabel = "RPM";
         break;
     case PLOT_POWER:
         yMin = 0;
         yMax = 1000;
-        yScale = 1; // adjust as needed
+        yScale = 1; 
         yLabel = "W";
         break;
     default:
         break;
     }
 
-    // If we've filled the plot, clear the area and reset the buffer, but keep the new point
     if (dataSize >= maxPoints)
     {
         // Clear the plotting area
@@ -1243,8 +1296,19 @@ static void vSensorData(uint32_t *data, int dataSize, PlotType plotType)
         for (uint32_t i = 0; i < maxPoints; i++)
             data[i] = 0;
         data[0] = lastValue;
-        g_ui32LightDataIndex = 1;
-        g_ui32LightDataCount = 1;
+        switch (plotType)
+        {
+        case PLOT_LIGHT:
+            g_ui32LightDataIndex = 1;
+            g_ui32LightDataCount = 1;
+            break;
+        case PLOT_ACCEL:
+            g_ui32AccelDataIndex = 1;
+            g_ui32AccelDataCount = 1;
+            break;
+        default:
+            break;
+        }
         return;
     }
 
@@ -1274,17 +1338,18 @@ static void vSensorData(uint32_t *data, int dataSize, PlotType plotType)
     // Add labels for the axes
     GrContextForegroundSet(&sContext, ClrWhite);
     GrContextFontSet(&sContext, g_psFontFixed6x8);
-    GrStringDraw(&sContext, xLabel, -1, xStart + 125, yStart + 12, false); // X-axis label
+    GrStringDraw(&sContext, xLabel, -1, xStart + 125, yStart + 6, false); // X-axis label
     GrStringDraw(&sContext, yLabel, -1, 20, 33, false);                    // Y-axis label
     // Draw Y axis min/max labels
     GrContextFontSet(&sContext, g_psFontFixed6x8);
     char yMinStr[8], yMaxStr[8];
     usprintf(yMinStr, "%u", yMin);
     usprintf(yMaxStr, "%u", yMax);
+    GrContextForegroundSet(&sContext, ClrRed);
     GrStringDraw(&sContext, yMinStr, -1, xStart - 8, yStart - 8, false);
     GrStringDraw(&sContext, yMaxStr, -1, xStart - 8, yTop - 15, false);
     // Draw X axis labels
-    GrStringDraw(&sContext, "20", -1, 305, yStart + 10, false);
+    GrStringDraw(&sContext, "20", -1, 305, yStart + 6, false);
 }
 void xTimerHandler(void)
 {

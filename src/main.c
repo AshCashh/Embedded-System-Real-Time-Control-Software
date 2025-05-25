@@ -119,12 +119,13 @@ static void prvBMI160DataReady(void);
 static void prvDisplayInit(void);
 
 
-QueueHandle_t xStructQueue = NULL; // Define the variable here
+
 /*
  * Queue used to send and receive pointers to struct AMessage structures.
  */
 QueueHandle_t xPointerQueue = NULL;
-QueueHandle_t xBMIQueue = NULL;
+QueueHandle_t xLightQueue = NULL; 
+QueueHandle_t xAccelQueue = NULL;
 
 EventGroupHandle_t xEventGroup = NULL;
 /*-----------------------------------------------------------*/
@@ -145,7 +146,7 @@ int main( void )
     /* Create the queue used to send complete struct AMessage structures.  This can
     also be created after the schedule starts, but care must be task to ensure
     nothing uses the queue until after it has been created. */
-    xStructQueue = xQueueCreate(
+    xLightQueue = xQueueCreate(
         /* The number of items the queue can hold. */
         mainQUEUE_LENGTH,
         /* Size of each item is big enough to hold the
@@ -162,14 +163,14 @@ int main( void )
         sizeof(AMessage));
 
         /* Create the queue used to send pointers to struct AMessage structures. */
-    xBMIQueue = xQueueCreate(
+    xAccelQueue = xQueueCreate(
         /* The number of items the queue can hold. */
         mainQUEUE_LENGTH,
         /* Size of each item is big enough to hold only a
         pointer. */
         sizeof(AMessage));
 
-    if ((xStructQueue == NULL) || (xPointerQueue == NULL))
+    if ((xLightQueue == NULL) || (xPointerQueue == NULL))
     {
     }
 

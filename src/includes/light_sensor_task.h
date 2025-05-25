@@ -20,12 +20,9 @@
 
 #define FILTER_SIZE 10
 // Structure for message queue
-typedef struct AMessage
-{
-    uint32_t ulTimeStamp;
-    uint32_t uRaw;
-    uint32_t uFiltered;
-} AMessage;
+
+
+extern QueueHandle_t xLightQueue;
 
 // Function declarations
 void vCreateLightSensorTask(void);

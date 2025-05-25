@@ -9,7 +9,7 @@
 /*
  * Queue used to send and receive complete struct AMessage structures.
  */
-extern QueueHandle_t xStructQueue;
+
 extern QueueHandle_t xPointerQueue;
 
 extern EventGroupHandle_t xEventGroup;
@@ -17,7 +17,12 @@ extern EventGroupHandle_t xEventGroup;
  * Time stamp global variable.
  */
 extern volatile uint32_t g_ui32TimeStamp;
-
+typedef struct AMessage
+{
+    uint32_t ulTimeStamp;
+    uint32_t uRaw;
+    uint32_t uFiltered;
+} AMessage;
 /*
  * The number of items the queue can hold.  This is 4 as the receive task
  * will remove items as they are added, meaning the send task should always find

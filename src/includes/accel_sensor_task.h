@@ -1,6 +1,6 @@
 // light_sensor_task.h
-#ifndef LIGHT_SENSOR_TASK_H
-#define LIGHT_SENSOR_TASK_H
+#ifndef ACCEL_SENSOR_TASK_H
+#define ACCEL_SENSOR_TASK_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -19,13 +19,9 @@
 #define LOW_THRESHOLD 50
 
 #define FILTER_SIZE 10
-// Structure for message queue
-typedef struct AMessage
-{
-    uint32_t ulTimeStamp;
-    uint32_t uRaw;
-    uint32_t uFiltered;
-} AMessage;
+
+// Acceleration queue
+extern QueueHandle_t xAccelQueue;
 
 typedef struct {
     uint32_t ulTimeStamp;

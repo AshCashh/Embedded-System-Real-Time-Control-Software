@@ -111,7 +111,6 @@
 #include "drivers/touch.h"
 #include "includes/common.h"
 #include "includes/accel_sensor_task.h"
-#include "includes/light_sensor_task.h"
 #include "includes/filter_util.h"
 #include "includes/display_task.h"
 #include "includes/button_task.h"
@@ -139,7 +138,7 @@ static float filterSumX = 0;
 static float filterSumY = 0;
 static float filterSumZ = 0;
 
-extern QueueHandle_t xBMIQueue;
+
 int sem_counter = 0;
 
 /*
@@ -161,9 +160,9 @@ void vCreateAccelTask(void)
 
     xTaskCreate(prvAccelTask,
                 "Accel Task",
-                512,
+                configMINIMAL_STACK_SIZE,
                 NULL,
-                tskIDLE_PRIORITY + 4,
+                tskIDLE_PRIORITY +1,
                 NULL);
 }
 
@@ -272,23 +271,23 @@ static void prvAccelTask(void *pvParameters)
             xMessage.ulTimeStamp = xTaskGetTickCount();
             xMessage.uFiltered = avgAbsAccel;
             xMessage.uRaw = avgAbsAccel_raw;
-            // if (xQueueSend(xBMIQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
-            // {
-            //     UARTprintf("Data sent to queue: %d.%d\n", (int)avgAbsAccel,(int)(avgAbsAccel * 100) % 100);
-            // }
-            // else
-            // {
-            //     UARTprintf("Error: Failed to send data to the queue\n");
-            // }
-            // UARTprintf("%d.%d\n", (int)avgAbsAccel,(int)(avgAbsAccel * 100) % 100);
-            if (counter == 100)
+            if (xQueueSend(xAccelQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
             {
-                UARTprintf("|%d\n", seconds++);
+                UARTprintf("Data sent to queue: %d.%d\n", (int)avgAbsAccel,(int)(avgAbsAccel * 100) % 100);
+            }
+            else
+            {
+                //UARTprintf("Error ACCEL: Failed to send data to the queue\n");
+            }
+            UARTprintf("%d.%d\n", (int)avgAbsAccel,(int)(avgAbsAccel * 100) % 100);
+            //if (counter == 100)
+            //{
+                //UARTprintf("|%d\n", seconds++);
             //     UBaseType_t watermark = uxTaskGetStackHighWaterMark(NULL);
             //     UARTprintf("[D] Stack high watermark: %d\n", watermark);
-                counter = 0;
-            }
-            counter++;
+                //counter = 0;
+            //}
+            //counter++;
 
             // UARTprintf("Filtered Accel: X: %d, Y: %d, Z: %d\n",
             //    (int)(filteredX * 1000),
@@ -297,7 +296,7 @@ static void prvAccelTask(void *pvParameters)
         }
         else
         {
-            UARTprintf("[!] Semaphore wait timed out\n");
+            //UARTprintf("[!] Semaphore wait timed out\n");
         }
     }
 }
