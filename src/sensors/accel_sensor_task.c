@@ -130,7 +130,7 @@ extern uint32_t g_ui32SysClock;
 
 tContext sContext;
 // Moving average filter variables
-#define FILTER_SIZE 100
+#define FILTER_SIZE 20
 static float filterBufferX[FILTER_SIZE] = {0};
 static float filterBufferY[FILTER_SIZE] = {0};
 static float filterBufferZ[FILTER_SIZE] = {0};
@@ -160,7 +160,7 @@ void vCreateAccelTask(void)
 
     xTaskCreate(prvAccelTask,
                 "Accel Task",
-                configMINIMAL_STACK_SIZE,
+                512,
                 NULL,
                 tskIDLE_PRIORITY + 4,
                 NULL);
@@ -190,10 +190,10 @@ static void prvAccelTask(void *pvParameters)
     static uint32_t lastTick = 0;
     static uint32_t sampleCounter = 0;
     struct AMessage xMessage;
-
+            static int counter = 0;
     while (1)
     {
-        if (xSemaphoreTake(xSampleAccelSemaphore, portMAX_DELAY) == pdTRUE)
+        if (xSemaphoreTake(xSampleAccelSemaphore, pdMS_TO_TICKS(500)) == pdTRUE)
         {
             // UARTprintf("    Reading sensor...\n");
             if (!sensorBMI160Read(rawData))
@@ -202,7 +202,7 @@ static void prvAccelTask(void *pvParameters)
             }
             // uint32_t currentTick = xTaskGetTickCount();
             // sampleCounter++;
-            // if (sampleCounter >= 20) // Log every 20 samples (~every 200 ms at 100 Hz)
+            // if (sampleCounter >= 100) // Log every 20 samples (~every 200 ms at 100 Hz)
             // {
             //     if (lastTick != 0)
             //     {
@@ -264,17 +264,26 @@ static void prvAccelTask(void *pvParameters)
             // {
             //     UARTprintf("Error: Failed to send data to the queue\n");
             // }
-            UARTprintf("Acceleration: %d.%d\n", (int)avgAbsAccel,(int)(avgAbsAccel * 100) % 100);
+
+            if (counter == 100)  {
+                UARTprintf("Acceleration: %d.%d\n", (int)avgAbsAccel,(int)(avgAbsAccel * 100) % 100);
+                counter = 0;
+            }
+            counter++;
+
                 // UARTprintf("Filtered Accel: X: %d, Y: %d, Z: %d\n",
             //    (int)(filteredX * 1000),
             //    (int)(filteredY * 1000),
             //    (int)(filteredZ * 1000));
+        } else {
+            UARTprintf("[!] Semaphore wait timed out\n");
         }
     }
 }
 
 void xI2CHandler(void)
 {
+    static counter = 0;
     BaseType_t xSignalTaskWoken = pdFALSE;
 
     // Clear interrupts
@@ -284,6 +293,11 @@ void xI2CHandler(void)
     if (!I2CMasterBusy(I2C2_BASE))
     {
         xSemaphoreGiveFromISR(xIC2MasterSemaphore, &xSignalTaskWoken);
+        // if (counter > 500) {
+        //     UARTprintf("[S]     Semaphore Given\n");
+        //     counter = 0;
+        // }
+        // counter++;
         portYIELD_FROM_ISR(xSignalTaskWoken);
     }
 }
@@ -295,7 +309,6 @@ void xBMI160DataReadyHandler(void)
     // uint32_t now = xTaskGetTickCount();
     // UARTprintf("delta=%d\n", now, now - lastTick);
     // lastTick = now;
-    // UARTprintf("-------------------------- Interrupt triggered\n");
     GPIOIntClear(GPIO_PORTD_BASE, GPIO_PIN_4);
     xSemaphoreGiveFromISR(xSampleAccelSemaphore, &xSignalTaskWoken);
     portYIELD_FROM_ISR(xSignalTaskWoken);

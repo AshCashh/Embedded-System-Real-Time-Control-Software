@@ -71,7 +71,7 @@
  **************************************************************************************************/
 bool sensorBMI160Init(void)
 {
-    vTaskDelay(pdMS_TO_TICKS(150));
+    vTaskDelay(pdMS_TO_TICKS(300));
     // softreset value to cmd reg
     uint8_t val = 0xB6;
     // reset sensor
