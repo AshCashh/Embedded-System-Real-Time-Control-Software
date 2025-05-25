@@ -304,22 +304,11 @@ static void prvAccelTask(void *pvParameters)
 
 void xI2CHandler(void)
 {
-    static counter = 0;
     BaseType_t xSignalTaskWoken = pdFALSE;
-
-    // Clear interrupts
     I2CMasterIntClear(I2C2_BASE);
 
-    // Only give the semaphore when the I2C bus is idle (transfer finished)
-    if (!I2CMasterBusy(I2C2_BASE))
-    {
-        xSemaphoreGiveFromISR(xIC2MasterSemaphore, &xSignalTaskWoken);
-        // if (counter > 500) {
-        //     UARTprintf("[S]     Semaphore Given\n");
-        //     counter = 0;
-        // }
-        // counter++;
-    }
+    xSemaphoreGiveFromISR(xIC2MasterSemaphore, &xSignalTaskWoken);
+
     portYIELD_FROM_ISR(xSignalTaskWoken);
 }
 

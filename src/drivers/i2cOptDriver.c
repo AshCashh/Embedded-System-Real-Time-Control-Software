@@ -22,6 +22,8 @@
 
 extern SemaphoreHandle_t xIC2MasterSemaphore;
 extern SemaphoreHandle_t xI2CMutex;
+
+extern uint32_t g_ui32SysClock;
 /*
  * Sets slave address to ui8Addr
  * Puts ui8Reg followed by two data bytes in *data and transfers
@@ -38,6 +40,7 @@ bool writeI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
     I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_START);
     if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(100)) != pdTRUE)
     {
+        I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_ERROR_STOP);
         xSemaphoreGive(xI2CMutex);
         return false;
     }
@@ -47,6 +50,7 @@ bool writeI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
     I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_CONT);
     if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(100)) != pdTRUE)
     {
+        I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_ERROR_STOP);
         xSemaphoreGive(xI2CMutex);
         return false;
     }
@@ -55,6 +59,7 @@ bool writeI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
     I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_FINISH);
     if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(100)) != pdTRUE)
     {
+        I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_ERROR_STOP);
         xSemaphoreGive(xI2CMutex);
         return false;
     }
@@ -71,14 +76,15 @@ bool writeI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
  */
 bool writeI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint8_t len)
 {
-    xSemaphoreTake(xI2CMutex, pdMS_TO_TICKS(100));
     if (len == 0)
         return false;
+    xSemaphoreTake(xI2CMutex, pdMS_TO_TICKS(100));
     I2CMasterSlaveAddrSet(I2C2_BASE, ui8Addr, false); // Write
     I2CMasterDataPut(I2C2_BASE, ui8Reg);
     I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_START);
     if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(100)) != pdTRUE)
     {
+        I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_ERROR_STOP);
         xSemaphoreGive(xI2CMutex);
         return false;
     }
@@ -89,6 +95,7 @@ bool writeI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint8_t len)
         I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_CONT);
         if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(100)) != pdTRUE)
         {
+            I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_ERROR_STOP);
             xSemaphoreGive(xI2CMutex);
             return false;
         }
@@ -97,6 +104,7 @@ bool writeI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint8_t len)
     I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_FINISH);
     if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(100)) != pdTRUE)
     {
+        I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_ERROR_STOP);
         xSemaphoreGive(xI2CMutex);
         return false;
     }
@@ -123,6 +131,7 @@ bool readI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
     I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_SINGLE_SEND);
     if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(100)) != pdTRUE)
     {
+        I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_ERROR_STOP);
         xSemaphoreGive(xI2CMutex);
         return false;
     }
@@ -134,6 +143,7 @@ bool readI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
     I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_RECEIVE_START);
     if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(100)) != pdTRUE)
     {
+        I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_ERROR_STOP);
         xSemaphoreGive(xI2CMutex);
         return false;
     }
@@ -143,6 +153,7 @@ bool readI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
     I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_RECEIVE_FINISH);
     if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(100)) != pdTRUE)
     {
+        I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_ERROR_STOP);
         xSemaphoreGive(xI2CMutex);
         return false;
     }
@@ -165,6 +176,7 @@ bool readI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint16_t len)
     I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_SINGLE_SEND);
     if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(100)) != pdTRUE)
     {
+        I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_ERROR_STOP);
         xSemaphoreGive(xI2CMutex);
         UARTprintf("[!] READ ERROR    Single Send Failed\n");
         return false;
@@ -177,6 +189,7 @@ bool readI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint16_t len)
     I2CMasterControl(I2C2_BASE, len == 1 ? I2C_MASTER_CMD_SINGLE_RECEIVE : I2C_MASTER_CMD_BURST_RECEIVE_START);
     if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(100)) != pdTRUE)
     {
+        I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_ERROR_STOP);
         xSemaphoreGive(xI2CMutex);
         UARTprintf("[!] READ ERROR    First Read Failed\n");
         return false;
@@ -189,6 +202,8 @@ bool readI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint16_t len)
         I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_RECEIVE_CONT);
         if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(100)) != pdTRUE)
         {
+            I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_ERROR_STOP);
+
             xSemaphoreGive(xI2CMutex);
             UARTprintf("[!] READ ERROR    Cont Read Failed\n");
             return false;
@@ -203,6 +218,8 @@ bool readI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint16_t len)
         I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_RECEIVE_FINISH);
         if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(100)) != pdTRUE)
         {
+            I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_ERROR_STOP);
+
             xSemaphoreGive(xI2CMutex);
             UARTprintf("[!] READ ERROR     Last Read Failed\n");
             return false;

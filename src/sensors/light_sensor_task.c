@@ -220,7 +220,7 @@ static void prvLightSensorTask(void *pvParameters)
                 xMessage.ulTimeStamp = xTaskGetTickCount();
                 xMessage.uFiltered = filteredLux;
                 xMessage.uRaw = convertedLux;
-                // UARTprintf("Lux: %d\n",  xMessage.uRaw);
+                UARTprintf("Lux: %d\n",  xMessage.uRaw);
                 // if (xQueueSend(xStructQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
                 // {
                 //     UARTprintf("Data sent to queue: %d\n", (int)convertedLux);
@@ -243,7 +243,6 @@ static void SignalSampling(TimerHandle_t timer)
 void xOptIntHandler(void) {
     BaseType_t xOPTTaskWoken = pdFALSE;
 
-    UARTprintf("[OPT]   OPT INT TRIGGERED\n");
     /* Read the PORT P interrupt status to find the cause of the interrupt. */
     uint32_t ui32Status = GPIOIntStatus(GPIO_PORTM_BASE, true);
 
