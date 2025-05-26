@@ -166,7 +166,6 @@ void vCreateLightSensorTask(void)
 
 static void prvLightSensorTask(void *pvParameters)
 {
-    UARTprintf("Light Sensor Task Started\n");
     // Wait for sensor to power up (important!)
 
     // Now initialize the OPT3001 sensor

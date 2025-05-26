@@ -138,8 +138,9 @@ static float filterSumX = 0;
 static float filterSumY = 0;
 static float filterSumZ = 0;
 
-
 int sem_counter = 0;
+
+extern bool bmi160ReadErrorStatus();
 
 /*
  * The tasks as described in the comments at the top of this file.
@@ -162,7 +163,7 @@ void vCreateAccelTask(void)
                 "Accel Task",
                 512, // Increased stack size for BMI160 operations
                 NULL,
-                tskIDLE_PRIORITY +1,
+                tskIDLE_PRIORITY + 1,
                 NULL);
 }
 
@@ -210,6 +211,14 @@ static void prvAccelTask(void *pvParameters)
                 UARTprintf("[!] Error Reading\n");
                 readI2C_acc(0x69, 0x1B, &status, 1);
                 UARTprintf("Status: 0x%02X\n", status);
+                uint8_t err;
+                if (bmi160ReadErrorStatus(&err))
+                {
+                    if (err != 0x00)
+                    {
+                        UARTprintf("BMI160 error status: 0x%02X\n", err);
+                    }
+                }
             }
             else
             {
@@ -270,7 +279,7 @@ static void prvAccelTask(void *pvParameters)
             // add to queue (both raw and filtered values)
             xMessage.ulTimeStamp = xTaskGetTickCount();
             xMessage.uFiltered = avgAbsAccel;
-            xMessage.uRaw = (uint32_t)(avgAbsAccel_raw * 100); 
+            xMessage.uRaw = (uint32_t)(avgAbsAccel_raw * 100);
             if (xQueueSend(xAccelQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
             {
                 // UARTprintf("Accel sent: %d\n", xMessage.uRaw);
@@ -296,7 +305,7 @@ static void prvAccelTask(void *pvParameters)
         }
         else
         {
-            //UARTprintf("[!] Semaphore wait timed out\n");
+            // UARTprintf("[!] Semaphore wait timed out\n");
         }
     }
 }

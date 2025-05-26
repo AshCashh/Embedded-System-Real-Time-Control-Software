@@ -216,3 +216,31 @@ static void prvBMI160DataReady(void)
 
     IntEnable(INT_GPIOD);
 }
+
+#define BMI160_I2C_ADDR  0x69
+#define BMI160_ERR_REG   0x02
+
+bool bmi160ReadErrorStatus(uint8_t *err)
+{
+    if (err == NULL) return false;
+
+    if (!readI2C(BMI160_I2C_ADDR, BMI160_ERR_REG, err))
+    {
+        UARTprintf("[!] Failed to read BMI160 ERR_REG\n");
+        return false;
+    }
+
+    UARTprintf("[*] BMI160 ERR_REG = 0x%02X\n", *err);
+
+    // Decode some known bits if needed
+    if (*err & 0x01)
+        UARTprintf("    [!] Fatal error detected\n");
+    if (*err & 0x02)
+        UARTprintf("    [!] Error in I2C communication\n");
+    if (*err & 0x04)
+        UARTprintf("    [!] SPI error\n");
+    if (*err & 0x08)
+        UARTprintf("    [!] Invalid register write\n");
+
+    return true;
+}

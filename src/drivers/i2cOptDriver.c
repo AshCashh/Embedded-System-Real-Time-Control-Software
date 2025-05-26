@@ -19,6 +19,8 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "semphr.h"
+#include "driverlib/gpio.h"
+#include "driverlib/pin_map.h"
 
 extern SemaphoreHandle_t xIC2MasterSemaphore;
 extern SemaphoreHandle_t xI2CMutex;
@@ -31,6 +33,10 @@ extern uint32_t g_ui32SysClock;
  */
 bool writeI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
 {
+    // while (I2CMasterBusBusy(I2C2_BASE))
+    // {
+    //     // Wait for the bus to be free
+    // }
     xSemaphoreTake(xI2CMutex, pdMS_TO_TICKS(100));
     // Load device slave address
     I2CMasterSlaveAddrSet(I2C2_BASE, ui8Addr, false);
@@ -41,6 +47,7 @@ bool writeI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
     if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(100)) != pdTRUE)
     {
         I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_ERROR_STOP);
+        I2C_Err();
         xSemaphoreGive(xI2CMutex);
         return false;
     }
@@ -51,6 +58,7 @@ bool writeI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
     if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(100)) != pdTRUE)
     {
         I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_ERROR_STOP);
+        I2C_Err();
         xSemaphoreGive(xI2CMutex);
         return false;
     }
@@ -60,6 +68,7 @@ bool writeI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
     if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(100)) != pdTRUE)
     {
         I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_ERROR_STOP);
+        I2C_Err();
         xSemaphoreGive(xI2CMutex);
         return false;
     }
@@ -78,6 +87,10 @@ bool writeI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint8_t len)
 {
     if (len == 0)
         return false;
+    // while (I2CMasterBusBusy(I2C2_BASE))
+    // {
+    //     // Wait for the bus to be free
+    // }
     xSemaphoreTake(xI2CMutex, pdMS_TO_TICKS(100));
     I2CMasterSlaveAddrSet(I2C2_BASE, ui8Addr, false); // Write
     I2CMasterDataPut(I2C2_BASE, ui8Reg);
@@ -85,6 +98,7 @@ bool writeI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint8_t len)
     if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(100)) != pdTRUE)
     {
         I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_ERROR_STOP);
+        I2C_Err();
         xSemaphoreGive(xI2CMutex);
         return false;
     }
@@ -96,6 +110,7 @@ bool writeI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint8_t len)
         if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(100)) != pdTRUE)
         {
             I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_ERROR_STOP);
+            I2C_Err();
             xSemaphoreGive(xI2CMutex);
             return false;
         }
@@ -105,6 +120,7 @@ bool writeI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint8_t len)
     if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(100)) != pdTRUE)
     {
         I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_ERROR_STOP);
+        I2C_Err();
         xSemaphoreGive(xI2CMutex);
         return false;
     }
@@ -122,6 +138,10 @@ bool writeI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint8_t len)
  */
 bool readI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
 {
+    // while (I2CMasterBusBusy(I2C2_BASE))
+    // {
+    //     // Wait for the bus to be free
+    // }
     xSemaphoreTake(xI2CMutex, pdMS_TO_TICKS(100));
     // Load device slave address and change I2C to write
     I2CMasterSlaveAddrSet(I2C2_BASE, ui8Addr, false);
@@ -132,6 +152,7 @@ bool readI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
     if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(100)) != pdTRUE)
     {
         I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_ERROR_STOP);
+        I2C_Err();
         xSemaphoreGive(xI2CMutex);
         return false;
     }
@@ -144,6 +165,7 @@ bool readI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
     if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(100)) != pdTRUE)
     {
         I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_ERROR_STOP);
+        I2C_Err();
         xSemaphoreGive(xI2CMutex);
         return false;
     }
@@ -154,6 +176,7 @@ bool readI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
     if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(100)) != pdTRUE)
     {
         I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_ERROR_STOP);
+        I2C_Err();
         xSemaphoreGive(xI2CMutex);
         return false;
     }
@@ -168,6 +191,10 @@ bool readI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint16_t len)
 {
     if (len < 1)
         return false;
+    // while (I2CMasterBusBusy(I2C2_BASE))
+    // {
+    //     // Wait for the bus to be free
+    // }
 
     xSemaphoreTake(xI2CMutex, pdMS_TO_TICKS(100));
     // Write register address (no stop)
@@ -177,6 +204,7 @@ bool readI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint16_t len)
     if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(100)) != pdTRUE)
     {
         I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_ERROR_STOP);
+        I2C_Err();
         xSemaphoreGive(xI2CMutex);
         UARTprintf("[!] READ ERROR    Single Send Failed\n");
         return false;
@@ -190,6 +218,8 @@ bool readI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint16_t len)
     if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(100)) != pdTRUE)
     {
         I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_ERROR_STOP);
+        I2C_Err();
+
         xSemaphoreGive(xI2CMutex);
         UARTprintf("[!] READ ERROR    First Read Failed\n");
         return false;
@@ -203,6 +233,7 @@ bool readI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint16_t len)
         if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(100)) != pdTRUE)
         {
             I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_ERROR_STOP);
+            I2C_Err();
 
             xSemaphoreGive(xI2CMutex);
             UARTprintf("[!] READ ERROR    Cont Read Failed\n");
@@ -219,7 +250,7 @@ bool readI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint16_t len)
         if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(100)) != pdTRUE)
         {
             I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_ERROR_STOP);
-
+            I2C_Err();
             xSemaphoreGive(xI2CMutex);
             UARTprintf("[!] READ ERROR     Last Read Failed\n");
             return false;
@@ -229,4 +260,96 @@ bool readI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint16_t len)
     xSemaphoreGive(xI2CMutex);
 
     return true;
+}
+
+void I2C_Err(void)
+{
+    uint32_t err = I2CMasterErr(I2C2_BASE);
+    UARTprintf("[!] I2C Read Error: 0x%02X\n", err);
+
+    if (err & I2C_MASTER_ERR_ADDR_ACK)
+    {
+        UARTprintf("[!] No ACK on address\n");
+    }
+    if (err & I2C_MASTER_ERR_DATA_ACK)
+    {
+        UARTprintf("[!] No ACK on data\n");
+    }
+    if (err & I2C_MASTER_ERR_ARB_LOST)
+    {
+        UARTprintf("[!] Arbitration lost\n");
+    }
+    recoverI2CBusIfStuck();
+}
+
+void recoverI2CBusIfStuck(void)
+{
+    if (I2CMasterBusBusy(I2C2_BASE))
+    {
+        UARTprintf("[!] I2C Bus Busy -- Attempting Recovery\n");
+        unstickI2CBus();
+        i2cGeneralCallReset(); // maybe working idk
+    }
+}
+
+bool i2cGeneralCallReset(void)
+{
+    uint8_t reset_cmd = 0x06; // General Call Software Reset
+    xSemaphoreTake(xI2CMutex, pdMS_TO_TICKS(100));
+
+    I2CMasterSlaveAddrSet(I2C2_BASE, 0x00, false); // General Call
+    I2CMasterDataPut(I2C2_BASE, reset_cmd);
+    I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_SINGLE_SEND);
+
+    if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(100)) != pdTRUE)
+    {
+        UARTprintf("[!] General Call Reset Failed\n");
+        xSemaphoreGive(xI2CMutex);
+        return false;
+    }
+
+    xSemaphoreGive(xI2CMutex);
+    UARTprintf("[*] General Call Reset Sent\n");
+    return true;
+}
+
+void unstickI2CBus(void)
+{
+    // Disable I2C peripheral
+    I2CMasterDisable(I2C2_BASE);
+    SysCtlDelay(1000);
+
+    // Reconfigure SDA and SCL as GPIO outputs
+    GPIOPinTypeGPIOOutput(GPIO_PORTN_BASE, GPIO_PIN_4 | GPIO_PIN_5);
+
+    // Both lines high initially (simulate idle state)
+    GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_4 | GPIO_PIN_5, GPIO_PIN_4 | GPIO_PIN_5);
+    SysCtlDelay(1000);
+
+    // Clock SCL 9 times
+    for (int i = 0; i < 9; i++)
+    {
+        GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_5, 0);             // SCL low
+        SysCtlDelay(1000);
+        GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_5, GPIO_PIN_5);    // SCL high
+        SysCtlDelay(1000);
+    }
+
+    // Simulate STOP condition: SDA high while SCL high
+    GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_4, 0); // SDA low
+    SysCtlDelay(1000);
+    GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_5, GPIO_PIN_5); // SCL high
+    GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_4, GPIO_PIN_4); // SDA high
+    SysCtlDelay(1000);
+
+    // Return SCL/SDA to I2C mode
+    GPIOPinConfigure(GPIO_PN5_I2C2SCL);
+    GPIOPinConfigure(GPIO_PN4_I2C2SDA);
+    GPIOPinTypeI2CSCL(GPIO_PORTN_BASE, GPIO_PIN_5);
+    GPIOPinTypeI2C(GPIO_PORTN_BASE, GPIO_PIN_4);
+
+    // Re-enable I2C
+    I2CMasterEnable(I2C2_BASE);
+    SysCtlDelay(1000);
+    I2CMasterInitExpClk(I2C2_BASE, SysCtlClockGet(), false);
 }

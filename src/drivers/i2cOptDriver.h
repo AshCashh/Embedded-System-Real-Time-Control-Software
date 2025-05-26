@@ -26,7 +26,8 @@ extern bool writeI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *Data);
 extern bool readI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *Data);
 extern bool readI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint16_t len);
 bool writeI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint8_t len);
-
-
+void unstickI2CBus(void);
+bool i2cGeneralCallReset(void);
+void recoverI2CBusIfStuck(void);
 
 #endif /* _I2COPTDRIVER_H_ */

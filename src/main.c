@@ -1,37 +1,37 @@
 /*
  *
  * Copyright (C) 2022 Texas Instruments Incorporated
- * 
- * 
- *  Redistribution and use in source and binary forms, with or without 
- *  modification, are permitted provided that the following conditions 
+ *
+ *
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions
  *  are met:
  *
- *    Redistributions of source code must retain the above copyright 
+ *    Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
  *
  *    Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the 
- *    documentation and/or other materials provided with the   
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the
  *    distribution.
  *
  *    Neither the name of Texas Instruments Incorporated nor the names of
  *    its contributors may be used to endorse or promote products derived
  *    from this software without specific prior written permission.
  *
- *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
- *  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ *  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
  *  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- *  A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
- *  OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- *  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
+ *  A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ *  OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ *  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
  *  LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
  *  DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- *  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
- *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+ *  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  *  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
-*/
+ */
 
 /******************************************************************************
  *
@@ -40,7 +40,6 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdint.h>
-
 
 /* Kernel includes. */
 #include "FreeRTOS.h"
@@ -77,8 +76,6 @@
 #include "includes/display_task.h"
 #include "includes/common.h"
 
-
-
 #include "grlib.h"
 #include "widget.h"
 #include "canvas.h"
@@ -106,11 +103,9 @@ SemaphoreHandle_t xSampleAccelSemaphore = NULL;
 SemaphoreHandle_t xI2CMutex = NULL;
 extern SemaphoreHandle_t xSemaphoreTimer0;
 
-
 extern tDisplay sContext;
 /* Set up the clock and pin configurations to run this example. */
-static void prvSetupHardware( void );
-
+static void prvSetupHardware(void);
 
 /* This function sets up UART0 to be used for a console to display information */
 static void prvConfigureUART(void);
@@ -119,19 +114,17 @@ static void prvBMI160DataReady(void);
 static void prvDisplayInit(void);
 void clearI2CBus(void);
 
-
-
 /*
  * Queue used to send and receive pointers to struct AMessage structures.
  */
 QueueHandle_t xPointerQueue = NULL;
-QueueHandle_t xLightQueue = NULL; 
+QueueHandle_t xLightQueue = NULL;
 QueueHandle_t xAccelQueue = NULL;
 
 EventGroupHandle_t xEventGroup = NULL;
 /*-----------------------------------------------------------*/
 
-int main( void )
+int main(void)
 {
     /* Prepare hardware */
     /* Create the event group */
@@ -142,9 +135,9 @@ int main( void )
     // if (xEventGroup == NULL)
     // {
     //     UARTprintf("Failed to create Event Group\n");
-    
+
     // }
-    
+
     /* Create the queue used to send complete struct AMessage structures.  This can
     also be created after the schedule starts, but care must be task to ensure
     nothing uses the queue until after it has been created. */
@@ -154,7 +147,6 @@ int main( void )
         /* Size of each item is big enough to hold the
         whole structure. */
         sizeof(AMessage));
-    
 
     /* Create the queue used to send pointers to struct AMessage structures. */
     xPointerQueue = xQueueCreate(
@@ -164,7 +156,7 @@ int main( void )
         pointer. */
         sizeof(AMessage));
 
-        /* Create the queue used to send pointers to struct AMessage structures. */
+    /* Create the queue used to send pointers to struct AMessage structures. */
     xAccelQueue = xQueueCreate(
         /* The number of items the queue can hold. */
         mainQUEUE_LENGTH,
@@ -176,7 +168,6 @@ int main( void )
     {
         UARTprintf("Queue creation failed\n");
     }
- 
 
     /* Create the binary semaphore used to synchronize the button ISR and the
      * button processing task. */
@@ -188,9 +179,7 @@ int main( void )
     xSemaphoreTimer0 = xSemaphoreCreateBinary();
     xI2CMutex = xSemaphoreCreateMutex();
 
-
-
-    if ( xButton1Semaphore != NULL && xButton2Semaphore != NULL && xIC2MasterSemaphore != NULL && xSampleLightSemaphore != NULL && xI2CMutex != NULL)
+    if (xButton1Semaphore != NULL && xButton2Semaphore != NULL && xIC2MasterSemaphore != NULL && xSampleLightSemaphore != NULL && xI2CMutex != NULL)
     {
         taskENTER_CRITICAL();
         /* Configure application specific hardware and initialize the task thread. */
@@ -202,31 +191,35 @@ int main( void )
         vTaskStartScheduler();
         UARTprintf("    Tasks Created\n");
     }
-    else {
+    else
+    {
         UARTprintf("Semaphore creation failed\n");
     }
-
 
     /* If all is well, the scheduler will now be running, and the following
     line will never be reached.  If the following line does execute, then
     there was insufficient FreeRTOS heap memory available for the idle and/or
     timer tasks to be created.  See the memory management section on the
     FreeRTOS web site for more details. */
-    for( ;; );
+    for (;;)
+        ;
 }
 /*-----------------------------------------------------------*/
 
-void clearI2CBus(void) {
+void clearI2CBus(void)
+{
     // Force SDA and SCL GPIO control
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPION);
-    while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPION));
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPION))
+        ;
 
     GPIOPinTypeGPIOOutput(GPIO_PORTN_BASE, GPIO_PIN_4 | GPIO_PIN_5);
 
     // Simulate 9 clock pulses on SCL to recover stuck slave
-    for (int i = 0; i < 9; i++) {
-        GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_5, 0); // SCL low
-        SysCtlDelay(g_ui32SysClock / 100000);         // ~10us
+    for (int i = 0; i < 9; i++)
+    {
+        GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_5, 0);          // SCL low
+        SysCtlDelay(g_ui32SysClock / 100000);                  // ~10us
         GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_5, GPIO_PIN_5); // SCL high
         SysCtlDelay(g_ui32SysClock / 100000);
     }
@@ -246,7 +239,8 @@ void clearI2CBus(void) {
 }
 
 // SMBus Interrupt for PORT P Pin 2 (OPT_INT)
-static void prvConfigSMBusINT(void) {
+static void prvConfigSMBusINT(void)
+{
 
     // Enable GPIO port for the INT pin
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOM);
@@ -266,7 +260,6 @@ static void prvConfigSMBusINT(void) {
     // enable interrupts
     IntMasterEnable();
 }
-
 
 // // config BMI160 data ready interrupt on Port P Pin 3
 // static void prvBMI160DataReady(void) {
@@ -310,40 +303,28 @@ static void prvConfigureUART(void)
     GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_1);
 
     /* Initialize the UART for console I/O. */
-    UARTStdioConfig(0, 9600, 16000000); 
+    UARTStdioConfig(0, 9600, 16000000);
     SysCtlDelay(g_ui32SysClock); // ~1 second delay at 120MHz to ensure UART initialises before using UARTprintf
 }
 
-// config I2C
-static void prvConfigureI2C(void) {
-    //
-    // The I2C0 peripheral must be enabled before use.
-    //
+static void prvConfigureI2C(void)
+{
     SysCtlPeripheralEnable(SYSCTL_PERIPH_I2C2);
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPION);
 
-    //
-    // Configure the pin muxing for I2C0 functions on port B2 and B3.
-    // This step is not necessary if your part does not support pin muxing.
-    //
     GPIOPinConfigure(GPIO_PN5_I2C2SCL);
     GPIOPinConfigure(GPIO_PN4_I2C2SDA);
 
-    //
-    // Select the I2C function for these pins.  This function will also
-    // configure the GPIO pins pins for I2C operation, setting them to
-    // open-drain operation with weak pull-ups.  Consult the data sheet
-    // to see which functions are allocated per pin.
-    //
+    // Set pins to I2C
     GPIOPinTypeI2CSCL(GPIO_PORTN_BASE, GPIO_PIN_5);
     GPIOPinTypeI2C(GPIO_PORTN_BASE, GPIO_PIN_4);
 
-    I2CMasterInitExpClk(I2C2_BASE, SysCtlClockGet(), false);
+    // pull-up 
+    GPIOPadConfigSet(GPIO_PORTN_BASE, GPIO_PIN_4 | GPIO_PIN_5,
+                     GPIO_STRENGTH_4MA, GPIO_PIN_TYPE_STD_WPU);
 
-    // Enable I2C2 master interrupt generation
-    I2CMasterIntEnable(I2C2_BASE);  // Enables interrupt generation by I2C0 hardware
-    
-    // Enable I2C2 interrupt in the NVIC
+    I2CMasterInitExpClk(I2C2_BASE, SysCtlClockGet(), false);
+    I2CMasterIntEnable(I2C2_BASE);
     IntEnable(INT_I2C2);
 }
 
@@ -357,7 +338,7 @@ void prvConfigureHWTimer(void)
     TimerClockSourceSet(TIMER0_BASE, TIMER_CLOCK_SYSTEM);
 
     /* Set the Timer 0A load value to run at 10 Hz. */
-    TimerLoadSet(TIMER0_BASE, TIMER_A, g_ui32SysClock /30);
+    TimerLoadSet(TIMER0_BASE, TIMER_A, g_ui32SysClock / 30);
 
     /* Configure the Timer 0A interrupt for timeout. */
     TimerIntRegister(TIMER0_BASE, TIMER_A, xTimerHandler);
@@ -377,8 +358,8 @@ void prvConfigureHWTimer(void)
 }
 /*-----------------------------------------------------------*/
 
-
-static void prvDisplayInit(void) {
+static void prvDisplayInit(void)
+{
     //
     // The FPU should be enabled because some compilers will use floating-
     // point registers, even for non-floating-point code.  If the FPU is not
@@ -411,12 +392,13 @@ static void prvDisplayInit(void) {
     TouchScreenCallbackSet(WidgetPointerMessage);
 }
 
-static void prvSetupHardware( void )
+static void prvSetupHardware(void)
 {
     /* Run from the PLL at configCPU_CLOCK_HZ MHz. */
     g_ui32SysClock = MAP_SysCtlClockFreqSet((SYSCTL_XTAL_25MHZ |
-            SYSCTL_OSC_MAIN | SYSCTL_USE_PLL |
-            SYSCTL_CFG_VCO_240), configCPU_CLOCK_HZ);
+                                             SYSCTL_OSC_MAIN | SYSCTL_USE_PLL |
+                                             SYSCTL_CFG_VCO_240),
+                                            configCPU_CLOCK_HZ);
 
     /* Configure device pins. */
     PinoutSet(false, false);
@@ -425,13 +407,12 @@ static void prvSetupHardware( void )
     prvConfigureI2C();
     // prvBMI160DataReady();
     // prvConfigSMBusINT();
-    //prvConfigureHWTimer();
+    // prvConfigureHWTimer();
     prvConfigureHWTimer(); // timer 0 A
 }
 /*-----------------------------------------------------------*/
 
-
-void vApplicationMallocFailedHook( void )
+void vApplicationMallocFailedHook(void)
 {
     /* vApplicationMallocFailedHook() will only be called if
     configUSE_MALLOC_FAILED_HOOK is set to 1 in FreeRTOSConfig.h.  It is a hook
@@ -444,11 +425,12 @@ void vApplicationMallocFailedHook( void )
     to query the size of free heap space that remains (although it does not
     provide information on how the remaining heap might be fragmented). */
     IntMasterDisable();
-    for( ;; );
+    for (;;)
+        ;
 }
 /*-----------------------------------------------------------*/
 
-void vApplicationIdleHook( void )
+void vApplicationIdleHook(void)
 {
     /* vApplicationIdleHook() will only be called if configUSE_IDLE_HOOK is set
     to 1 in FreeRTOSConfig.h.  It will be called on each iteration of the idle
@@ -462,7 +444,7 @@ void vApplicationIdleHook( void )
 }
 /*-----------------------------------------------------------*/
 
-void vApplicationTickHook( void )
+void vApplicationTickHook(void)
 {
     /* This function will be called by each tick interrupt if
         configUSE_TICK_HOOK is set to 1 in FreeRTOSConfig.h.  User code can be
@@ -475,28 +457,27 @@ void vApplicationTickHook( void )
 }
 /*-----------------------------------------------------------*/
 
-
-void vApplicationStackOverflowHook( TaskHandle_t pxTask, char *pcTaskName )
+void vApplicationStackOverflowHook(TaskHandle_t pxTask, char *pcTaskName)
 {
-    ( void ) pcTaskName;
-    ( void ) pxTask;
+    (void)pcTaskName;
+    (void)pxTask;
 
     /* Run time stack overflow checking is performed if
     configCHECK_FOR_STACK_OVERFLOW is defined to 1 or 2.  This hook
     function is called if a stack overflow is detected. */
     UARTprintf("[!] STACK OVERFLOW in task: %s\n", pcTaskName);
     IntMasterDisable();
-    for( ;; );
+    for (;;)
+        ;
 }
 /*-----------------------------------------------------------*/
 
-void *malloc( size_t xSize )
+void *malloc(size_t xSize)
 {
     /* There should not be a heap defined, so trap any attempts to call
     malloc. */
     IntMasterDisable();
-    for( ;; );
+    for (;;)
+        ;
 }
 /*-----------------------------------------------------------*/
-
-
