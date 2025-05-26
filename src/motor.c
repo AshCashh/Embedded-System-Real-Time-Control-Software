@@ -75,12 +75,12 @@
 #include "variables.h"
 #include "motorlib.h"
 
-#define BUTTON_DUTY_INCREMENT 5 
-#define AVERAGE_SAMPLES 60
+#define BUTTON_DUTY_INCREMENT 5
 
 extern motorcontrol_t motor_ctrl;
 
-volatile uint32_t count = 0;
+volatile float latest_rpm;
+volatile uint32_t last_tick = 0;
 /*
  * Time stamp global variable.
  */
@@ -149,7 +149,7 @@ void vCreateMotorTask(void)
                 "ButtonTask",
                 configMINIMAL_STACK_SIZE,
                 NULL,
-                tskIDLE_PRIORITY + 2,
+                tskIDLE_PRIORITY + 3,
                 NULL);
     xTaskCreate(prvMotorPIDTask,
                 "MotorPID",
@@ -158,18 +158,18 @@ void vCreateMotorTask(void)
                 tskIDLE_PRIORITY + 2,
                 NULL);
 
-    xTaskCreate(prvEmergencyCheckTask,
-                "EmergencyCheck",
-                configMINIMAL_STACK_SIZE,
-                NULL,
-                tskIDLE_PRIORITY + 4,
-                NULL);
-    xTaskCreate(prvEmergencyAckTask,
-                "EmergencyAck",
-                configMINIMAL_STACK_SIZE,
-                NULL,
-                tskIDLE_PRIORITY + 3,
-                NULL);
+    // xTaskCreate(prvEmergencyCheckTask,
+    //             "EmergencyCheck",
+    //             configMINIMAL_STACK_SIZE,
+    //             NULL,
+    //             tskIDLE_PRIORITY + 4,
+    //             NULL);
+    // xTaskCreate(prvEmergencyAckTask,
+    //             "EmergencyAck",
+    //             configMINIMAL_STACK_SIZE,
+    //             NULL,
+    //             tskIDLE_PRIORITY + 3,
+    //             NULL);
 }
 /*-----------------------------------------------------------*/
 static void prvConfigureButton(void)
@@ -190,7 +190,6 @@ static void prvConfigureButton(void)
     /* Enable global interrupts in the NVIC. */
     IntMasterEnable();
 }
-
 
 static void prvEmergencyCheckTask(void *pvParameters)
 {
@@ -243,17 +242,15 @@ static void prvEmergencyAckTask(void *pvParameters)
     }
 }
 
-
-
 static void prvButtonTask(void *pvParameters)
 {
     /*
-        * Button task
-        * This task is responsible for handling the button presses and updating
-        * the motor speed and direction accordingly. It uses a semaphore to
-        * synchronize with the button interrupt handler.
-        * This is primarily for testing purposes in the place of an Actual UI
-    */
+     * Button task
+     * This task is responsible for handling the button presses and updating
+     * the motor speed and direction accordingly. It uses a semaphore to
+     * synchronize with the button interrupt handler.
+     * This is primarily for testing purposes in the place of an Actual UI
+     */
     for (;;)
     {
         // only runs if the timer indicates and update has occured
@@ -285,13 +282,13 @@ static void prvButtonTask(void *pvParameters)
                         xSemaphoreGive(xEstopAcknowledge);
                     }
                     // prevents the duty cycle from going out of range
-                    //Prevents the pwm from going past 100%
+                    // Prevents the pwm from going past 100%
                     else if ((motor_ctrl.pwm + BUTTON_DUTY_INCREMENT) >= 96)
                     {
                         // Safety feature
                         UARTprintf("\nDUTY VALUE MAXED OUT\n");
 
-                        //Sends the motor down to a slightly safer value
+                        // Sends the motor down to a slightly safer value
                         motor_ctrl.pwm = 90;
                     }
                     else
@@ -306,110 +303,107 @@ static void prvButtonTask(void *pvParameters)
         }
     }
 }
-#define MOVING_AVERAGE_SAMPLES 30
 
-static void prvMotorPIDTask(void* parameters)
+static void prvMotorPIDTask(void *parameters)
 {
-    uint32_t hall_int_count = 0;
-    float rpm = 0.0f;
     float rpm_prev = 0.0f;
-    float target_rpm = 0.0f;
-    float acceleration = 0.0f;
-    float error = 0.0f;
-    float u = 0.0f;
-    float integral = 0.0f;
-    float derivative = 0.0f;
     float error_prev = 0.0f;
+    float integral = 0.0f;
 
-    // Moving average buffers and indexes
-    float rpm_buffer[MOVING_AVERAGE_SAMPLES] = {0};
-    float rpm_sum = 0.0f;
-    int rpm_index = 0;
+    /* RPM moving‐average state */
+    static float rpm_buffer[MOVING_AVERAGE_SAMPLES] = {0};
+    static uint32_t rpm_index = 0;
+    static float rpm_sum = 0.0f;
 
-    float accel_buffer[MOVING_AVERAGE_SAMPLES] = {0};
-    float accel_sum = 0.0f;
-    int accel_index = 0;
-
+    /* Acceleration moving‐average state */
+    static float accel_buffer[MOVING_AVERAGE_SAMPLES] = {0};
+    static uint32_t accel_index = 0;
+    static float accel_sum = 0.0f;
+    
+    /* Ramp RPM to limit acceleration exceeding */
+    static float ramped_target_rpm = 0.0f;
+    /* RPM limit vars */
+    const float max_accel_delta = MAX_ACCELERATION_RPMS * dt;
+    /* consider only regular deceleration for now */
+    const float max_decel_delta = MAX_DECELERATION_RPMS * dt;
     prvMotorStart();
 
     for (;;)
     {
-        if (xSemaphoreTake(xPIDTimerSemaphore, pdMS_TO_TICKS(2000)) == pdTRUE)
+        if (xSemaphoreTake(xPIDTimerSemaphore, pdMS_TO_TICKS(2000)) != pdTRUE)
+            continue;
+
+        taskENTER_CRITICAL();
+        float raw_rpm = latest_rpm;
+        taskEXIT_CRITICAL();
+        rpm_sum -= rpm_buffer[rpm_index];
+        rpm_buffer[rpm_index] = raw_rpm;
+        rpm_sum += raw_rpm;
+        rpm_index = (rpm_index + 1) % MOVING_AVERAGE_SAMPLES;
+        float rpm = rpm_sum / (float)MOVING_AVERAGE_SAMPLES;
+
+        float acceleration = (rpm - rpm_prev) * PID_FREQUENCY;
+        rpm_prev = rpm;
+
+        accel_sum -= accel_buffer[accel_index];
+        accel_buffer[accel_index] = acceleration;
+        accel_sum += acceleration;
+        accel_index = (accel_index + 1) % MOVING_AVERAGE_SAMPLES;
+        float avg_acceleration = accel_sum / (float)MOVING_AVERAGE_SAMPLES;
+        /* clamp local target rpm to prevent overshooting acceleration */
+
+        float local_target_rpm;
+        uint32_t local_period;
+        if (xSemaphoreTake(motor_ctrl.mutex, pdMS_TO_TICKS(20)) == pdTRUE)
         {
-            taskENTER_CRITICAL();
-            hall_int_count = count;
-            count = 0;
-            target_rpm = motor_ctrl.target_rpm;
-            taskEXIT_CRITICAL();
-
-            // Get new RPM sample and update RPM moving average
-            float rpm_new = count_to_rpm(hall_int_count);
-            rpm_sum -= rpm_buffer[rpm_index];
-            rpm_sum += rpm_new;
-            rpm_buffer[rpm_index] = rpm_new;
-            rpm_index = (rpm_index + 1) % MOVING_AVERAGE_SAMPLES;
-            rpm = rpm_sum / MOVING_AVERAGE_SAMPLES;
-
-            // PID calculations
-            error = target_rpm - rpm;
-
-            // Apply 5% tolerance (deadband)
-            float tolerance = 0.05f * target_rpm;
-            if (fabs(error) < tolerance)
-            {
-                error = 0.0f;
-            }
-
-            integral += error * dt;
-            derivative = (error - error_prev) / dt;
-            error_prev = error;
-
-            u = Kp * error + Ki * integral + Kd * derivative;
-            u = clamp(u, 2, 100);
-            
-            if (xSemaphoreTake(motor_ctrl.mutex, pdMS_TO_TICKS(20)) == pdTRUE)
-            {
-                motor_ctrl.rpm = rpm;
-                motor_ctrl.pwm = u;
-                motor_ctrl.duty_value = PWM_TO_DUTY(motor_ctrl.period_value, motor_ctrl.pwm);
-                setDuty(motor_ctrl.duty_value);
-
-                if ((motor_ctrl.stall_counter < STALL_VAL) && (motor_ctrl.rpm == 0))
-                {
-                    motor_ctrl.stall_counter++;
-                }
-                else if (motor_ctrl.rpm > 0)
-                {
-                    motor_ctrl.stall_counter = 0;
-                }
-                else if (motor_ctrl.stall_counter >= STALL_VAL)
-                {
-                    motor_ctrl.target_rpm = 0;
-                    integral = 0.0f;
-                    motor_ctrl.motor_enabled = false;
-                    motor_ctrl.stall_counter = STALL_VAL + 1;
-                    disableMotor();
-                }
-
-                xSemaphoreGive(motor_ctrl.mutex);
-            }
-
-            // Calculate new acceleration sample
-            float accel_new = (rpm - rpm_prev) * PID_FREQUENCY;
-            rpm_prev = rpm;
-
-            // Update acceleration moving average
-            accel_sum -= accel_buffer[accel_index];
-            accel_sum += accel_new;
-            accel_buffer[accel_index] = accel_new;
-            accel_index = (accel_index + 1) % MOVING_AVERAGE_SAMPLES;
-            acceleration = accel_sum / MOVING_AVERAGE_SAMPLES;
-
-            UARTprintf("%d, %d, %d, %d, %d\n", (int)rpm, (int)target_rpm, (int)acceleration, (int)integral, (int)derivative);
+            local_target_rpm = motor_ctrl.target_rpm;
+            local_period = motor_ctrl.period_value;
+            xSemaphoreGive(motor_ctrl.mutex);
         }
+        else
+        {
+            local_target_rpm = 0.0f;
+            local_period = motor_ctrl.period_value;
+        }
+
+        if ((local_target_rpm - ramped_target_rpm) > max_accel_delta)
+        {
+            ramped_target_rpm += max_accel_delta;
+        } else if ((local_target_rpm - ramped_target_rpm) < -max_decel_delta)
+        {
+            ramped_target_rpm -= max_decel_delta;
+        } else {
+            ramped_target_rpm = local_target_rpm;
+        }
+
+        /* PID loop */
+        float error = ramped_target_rpm - rpm;
+        integral += error * dt;
+        float derivative = (error - error_prev) / dt;
+        error_prev = error;
+        /* Clamp input to PWM duty cycle */
+        float u = clamp(Kp*error + Ki*integral + Kd*derivative, 2.0f, 100.0f);
+        uint32_t local_duty = PWM_TO_DUTY(local_period, u);
+
+        bool need_disable = false;
+        if (xSemaphoreTake(motor_ctrl.mutex, pdMS_TO_TICKS(20)) == pdTRUE)
+        {
+            motor_ctrl.rpm = rpm;
+            motor_ctrl.pwm = u;
+            motor_ctrl.duty_value = local_duty;
+            xSemaphoreGive(motor_ctrl.mutex);
+        }
+
+        setDuty(local_duty);
+        if (need_disable) disableMotor();
+
+        UARTprintf("RPM: %d, Target: %d, AvgAccel: %d, Ramped Target RPM: %d\n",
+                   (int)rpm,
+                   (int)local_target_rpm,
+                   (int)avg_acceleration,
+                   (int)ramped_target_rpm);
     }
 }
-
 
 
 
@@ -419,10 +413,10 @@ static void prvMotorPIDTask(void* parameters)
 void HallSensorHandler(void)
 {
     /*
-    * Hall sensor interrupt handler
-    * This function is called when the hall sensor interrupts are triggered.
-    * It clears the interrupt and updates the motor phase based on the hall
-    */
+     * Hall sensor interrupt handler
+     * This function is called when the hall sensor interrupts are triggered.
+     * It clears the interrupt and updates the motor phase based on the hall
+     */
     /* Get type of interrupt */
     BaseType_t xMotorTaskWoken = pdFALSE;
     uint32_t ui32StatusM = GPIOIntStatus(GPIO_PORTM_BASE, true);
@@ -434,20 +428,14 @@ void HallSensorHandler(void)
     GPIOIntClear(GPIO_PORTH_BASE, ui32StatusH);
     GPIOIntClear(GPIO_PORTN_BASE, ui32StatusN);
 
-    // /* trigger interrupt on port m pin 2*/
-    // if (ui32StatusM & GPIO_PIN_3)
-    // {
-    //     /* give semaphore */
-    //     uint32_t timestamp = xTaskGetTickCount();
-    //     xQueueSendFromISR(xMotorTimestampQueue, &timestamp, NULL);
-    //     portYIELD_FROM_ISR(xMotorTaskWoken);
-    // }
-
-    count++;
+    uint32_t now = xTaskGetTickCountFromISR();
+    uint32_t tick_delta = now - last_tick;
+    last_tick = now;
+    float minute_delta = TICKS_TO_MINUTES(tick_delta);
+    latest_rpm = 1 / (COUNT_PER_REVOLUTION * minute_delta);
     int tmp[3] = {0, 0, 0};
     getHallSensorValues(tmp);
     updateMotor(tmp[0], tmp[1], tmp[2]);
-
 }
 void xButtonsHandler(void)
 {
@@ -478,14 +466,13 @@ void xButtonsHandler(void)
     g_ui32TimeStamp = xTaskGetTickCount();
 }
 
-
 void xPIDTimerHandler(void)
 {
     /*
-    * This timer is used to update the motor control calculations
-    * It is used to update the RPM and acceleration values
-    * It is also used to update the motor control calculations
-    */
+     * This timer is used to update the motor control calculations
+     * It is used to update the RPM and acceleration values
+     * It is also used to update the motor control calculations
+     */
     /* Clear the hardware interrupt flag for Timer 2A. */
     TimerIntClear(TIMER2_BASE, TIMER_TIMA_TIMEOUT);
 
@@ -495,7 +482,6 @@ void xPIDTimerHandler(void)
     BaseType_t xPIDTaskWoken = pdFALSE;
 
     xSemaphoreGiveFromISR(xPIDTimerSemaphore, &xPIDTaskWoken);
-
 
     /*give the semaphore*/
     portYIELD_FROM_ISR(xPIDTaskWoken);
@@ -514,9 +500,10 @@ void prvMotorStart()
     prvConfigureButton();
     if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
     {
+        motor_ctrl.pwm = 50;
+        motor_ctrl.target_rpm = 1000;
         /* Initialise the motors and set the duty cycle (speed) in microseconds */
         initMotorLib(motor_ctrl.period_value);
-
         motor_ctrl.duty_value = PWM_TO_DUTY(motor_ctrl.period_value, motor_ctrl.pwm);
         setDuty(motor_ctrl.duty_value);
         motor_ctrl.motor_enabled = true;

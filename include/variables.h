@@ -52,6 +52,7 @@
 // #define PWM_FREQUENCY 100000
 #define STALL_DURATION 1 //seconds
 
+#define TICKS_TO_MINUTES(t) ( ((float)(t) / (float)configTICK_RATE_HZ) / 60.0f )
 
 
 #define PID_FREQUENCY 120   //Hz
@@ -62,14 +63,23 @@
 
 #define SECONDS_PER_MINUTE 60
 
+#define MAX_ACCELERATION_RPMS 500.0f
+#define MAX_DECELERATION_RPMS 500.0f
+#define ESTOP_DECELERATION_RPMS 1000.0f
+
 static inline float count_to_rpm(int count)
 {
     return ((float)count / COUNT_PER_REVOLUTION) * PID_FREQUENCY * SECONDS_PER_MINUTE;
 }
+#define MOVING_AVERAGE_SAMPLES  30
 
-#define Kp  0.002f   // 10× larger
-#define Ki  0.024f  // 10× smaller
-#define Kd  0.86f  // a bit stronger damping
+// #define Kp  0.2f   // 10× larger
+// #define Ki  0.24f  // 10× smaller
+// #define Kd  1.0f  // a bit stronger damping
+
+#define Kp   0.05f
+#define Ki   0.16f   // (Ki_speed * dt) ≈ 0.002 per tick
+#define Kd   0.08f   // (Kd_speed / dt) ≈ 1.0 per tick
 
 #define dt 1/PID_FREQUENCY 
 #define EPSILON 1e-6f

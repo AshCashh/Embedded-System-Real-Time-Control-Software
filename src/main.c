@@ -292,6 +292,10 @@ static void prvConfigureHallInts( void )
         GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
     GPIOPadConfigSet(HALLC,
         GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+    /* Int priority maximum */
+    IntPrioritySet(INT_GPIOM, configMAX_SYSCALL_INTERRUPT_PRIORITY);
+    IntPrioritySet(INT_GPION, configMAX_SYSCALL_INTERRUPT_PRIORITY);
+    IntPrioritySet(INT_GPIOH, configMAX_SYSCALL_INTERRUPT_PRIORITY);
     /* Clear any prior interrupt flags. */
     GPIOIntClear(HALLA);
     GPIOIntClear(HALLB);
