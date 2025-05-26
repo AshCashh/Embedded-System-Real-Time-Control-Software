@@ -38,8 +38,7 @@ bool getHallSensorValues(int32_t* halls)
 void setDuty(float duty)
 {
     // UARTprintf("setDuty: %d\n", duty);
-    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1,
-        (int)(MICROSECONDS(duty)));
+    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1,  (int)(SysCtlClockGet() * (float)(duty / 1000000.0f)));
 }
 
 void updateMotor(bool Hall_a, bool Hall_b, bool Hall_c)

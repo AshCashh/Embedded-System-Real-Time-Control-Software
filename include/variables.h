@@ -4,6 +4,7 @@
 #include "task.h"
 #include "queue.h"
 #include "semphr.h"
+#include "math.h"
 /* Defines for motor ctrl */
 
 #define INHA GPIO_PORTF_BASE, GPIO_PIN_1
@@ -43,7 +44,6 @@
 */
 #define MICROSECONDS(duty) \
     (SysCtlClockGet()*duty/1000000)
-
 /* PWM to DUTY*/
 
 #define PWM_TO_DUTY(period_value, pwm) \
@@ -67,13 +67,18 @@ static inline float count_to_rpm(int count)
     return ((float)count / COUNT_PER_REVOLUTION) * PID_FREQUENCY * SECONDS_PER_MINUTE;
 }
 
-/* PID variables */
-#define Kp 0.0012 /* Proportional gain */
-#define Kd 0.0006 /* Derivative gain */
-#define Ki 0.038  /* Integral gain */
-#define dt 1/PID_FREQUENCY
-#define clamp(value, min, max) \
-    ((value < min) ? min : ((value > max) ? max : value))
+#define Kp  0.002f   // 10× larger
+#define Ki  0.024f  // 10× smaller
+#define Kd  0.86f  // a bit stronger damping
+
+#define dt 1/PID_FREQUENCY 
+#define EPSILON 1e-6f
+
+static inline float clamp(float value, float min, float max)
+{
+    return fminf(fmaxf(value, min), max);
+}
+
 #define BUTTON_RPM_INCREMENT 100 // RPM increment for button press
 /* 
     Commutation phases for 3 phase BLDC with INHC = 1

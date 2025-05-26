@@ -3,6 +3,10 @@
         "motorlib.h": "c",
         "limits": "c",
         "type_traits": "c",
-        "cmath": "c"
+        "cmath": "c",
+        "functional": "c",
+        "array": "c",
+        "tuple": "c",
+        "utility": "c"
     }
 }

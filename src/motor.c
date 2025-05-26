@@ -306,50 +306,76 @@ static void prvButtonTask(void *pvParameters)
         }
     }
 }
+#define MOVING_AVERAGE_SAMPLES 30
 
-static void prvMotorPIDTask( void* parameters )
+static void prvMotorPIDTask(void* parameters)
 {
     uint32_t hall_int_count = 0;
     float rpm = 0.0f;
-    float rpm_prev = 0.0f; // Previous RPM for acceleration calculation
+    float rpm_prev = 0.0f;
     float target_rpm = 0.0f;
-    float acceleration = 0.0f; // Acceleration in RPM/s
+    float acceleration = 0.0f;
     float error = 0.0f;
-    float u = 0.0f; // Control signal
-    float integral = 0.0f; // Integral term
-    float derivative = 0.0f; // Derivative term
-    float error_prev = 0.0f; // Previous error for derivative calculation
-    prvMotorStart(); // Start the motor and initialize the control
+    float u = 0.0f;
+    float integral = 0.0f;
+    float derivative = 0.0f;
+    float error_prev = 0.0f;
+
+    // Moving average buffers and indexes
+    float rpm_buffer[MOVING_AVERAGE_SAMPLES] = {0};
+    float rpm_sum = 0.0f;
+    int rpm_index = 0;
+
+    float accel_buffer[MOVING_AVERAGE_SAMPLES] = {0};
+    float accel_sum = 0.0f;
+    int accel_index = 0;
+
+    prvMotorStart();
+
     for (;;)
     {
         if (xSemaphoreTake(xPIDTimerSemaphore, pdMS_TO_TICKS(2000)) == pdTRUE)
         {
-            /* enter critical section to get count and leave */
             taskENTER_CRITICAL();
             hall_int_count = count;
-            count = 0; // reset count
-            target_rpm = motor_ctrl.target_rpm; // Get target RPM from motor control struct
+            count = 0;
+            target_rpm = motor_ctrl.target_rpm;
             taskEXIT_CRITICAL();
-            rpm = count_to_rpm(hall_int_count);
+
+            // Get new RPM sample and update RPM moving average
+            float rpm_new = count_to_rpm(hall_int_count);
+            rpm_sum -= rpm_buffer[rpm_index];
+            rpm_sum += rpm_new;
+            rpm_buffer[rpm_index] = rpm_new;
+            rpm_index = (rpm_index + 1) % MOVING_AVERAGE_SAMPLES;
+            rpm = rpm_sum / MOVING_AVERAGE_SAMPLES;
+
+            // PID calculations
             error = target_rpm - rpm;
-            integral = integral + error * dt; // Integral term
-            // Prevent integral windup
-            derivative = (error - error_prev) / dt; // Derivative term
-            /* clamp integral error to avoid windup */
-            u = Kp * error + Ki * integral + Kd * derivative; // PID control signal
-            error_prev = error; // Update previous error
-            // Clamp the control signal to a valid range
-            u = clamp(u, 2, 100); // Assuming u is a percentage value (2-100%)
+
+            // Apply 5% tolerance (deadband)
+            float tolerance = 0.05f * target_rpm;
+            if (fabs(error) < tolerance)
+            {
+                error = 0.0f;
+            }
+
+            integral += error * dt;
+            derivative = (error - error_prev) / dt;
+            error_prev = error;
+
+            u = Kp * error + Ki * integral + Kd * derivative;
+            u = clamp(u, 2, 100);
+            
             if (xSemaphoreTake(motor_ctrl.mutex, pdMS_TO_TICKS(20)) == pdTRUE)
             {
-                motor_ctrl.rpm = rpm; // Update RPM in motor control struct
-                motor_ctrl.pwm = u; // Update PWM value based on control signal
+                motor_ctrl.rpm = rpm;
+                motor_ctrl.pwm = u;
                 motor_ctrl.duty_value = PWM_TO_DUTY(motor_ctrl.period_value, motor_ctrl.pwm);
-                setDuty(motor_ctrl.duty_value); // Set the duty cycle
-                
+                setDuty(motor_ctrl.duty_value);
+
                 if ((motor_ctrl.stall_counter < STALL_VAL) && (motor_ctrl.rpm == 0))
                 {
-                    // UARTprintf("Motor Stalling\n");
                     motor_ctrl.stall_counter++;
                 }
                 else if (motor_ctrl.rpm > 0)
@@ -358,22 +384,34 @@ static void prvMotorPIDTask( void* parameters )
                 }
                 else if (motor_ctrl.stall_counter >= STALL_VAL)
                 {
-
-                    // UARTprintf("Motor Stalled\n");
                     motor_ctrl.target_rpm = 0;
                     integral = 0.0f;
                     motor_ctrl.motor_enabled = false;
                     motor_ctrl.stall_counter = STALL_VAL + 1;
                     disableMotor();
                 }
+
                 xSemaphoreGive(motor_ctrl.mutex);
             }
-            acceleration = (float)(rpm - rpm_prev) * (float)PID_FREQUENCY; // Calculate acceleration in RPM/s
-            UARTprintf("%d, %d, %d\n", (int)rpm, (int)target_rpm, (int)acceleration);
-            rpm_prev = rpm; // Update previous RPM for next iteration
+
+            // Calculate new acceleration sample
+            float accel_new = (rpm - rpm_prev) * PID_FREQUENCY;
+            rpm_prev = rpm;
+
+            // Update acceleration moving average
+            accel_sum -= accel_buffer[accel_index];
+            accel_sum += accel_new;
+            accel_buffer[accel_index] = accel_new;
+            accel_index = (accel_index + 1) % MOVING_AVERAGE_SAMPLES;
+            acceleration = accel_sum / MOVING_AVERAGE_SAMPLES;
+
+            UARTprintf("%d, %d, %d, %d, %d\n", (int)rpm, (int)target_rpm, (int)acceleration, (int)integral, (int)derivative);
         }
     }
 }
+
+
+
 
 /*-----------------------------------------------------------*/
 /* Interrupt handlers */
