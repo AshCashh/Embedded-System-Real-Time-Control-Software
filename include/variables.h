@@ -54,7 +54,7 @@
 
 
 
-#define PID_FREQUENCY 80   //Hz
+#define PID_FREQUENCY 20   //Hz
 
 #define STALL_VAL STALL_DURATION*PID_FREQUENCY
 
@@ -71,10 +71,10 @@ static inline float count_to_rpm(int count)
 #define Kp 0.0012 /* Proportional gain */
 #define Kd 0.0006 /* Derivative gain */
 #define Ki 0.038  /* Integral gain */
-#define dt 1/PID_FREQUENCY // 10 ms
+#define dt 1/PID_FREQUENCY
 #define clamp(value, min, max) \
     ((value < min) ? min : ((value > max) ? max : value))
-#define BUTTON_RPM_INCREMENT 100 // RPM increment for button press
+#define BUTTON_RPM_INCREMENT 1000 // RPM increment for button press
 /* 
     Commutation phases for 3 phase BLDC with INHC = 1
     Phase F loops back to phase A per revolution 
@@ -115,8 +115,8 @@ typedef struct
     bool motor_enabled; /* stall prevention flag */
     bool brake; /* brake flag */
     uint8_t stall_counter; /* reactivation count */
-    uint32_t rpm; /* current rpm value */
-    uint32_t target_rpm; /* target rpm value */
+    float rpm; /* current rpm value */
+    float target_rpm; /* target rpm value */
     int32_t acceleration; /* current acceleration value */
     uint32_t hall_sensor_values[3]; /* hall sensor values */
     /* timestamp */

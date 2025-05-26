@@ -379,16 +379,17 @@ static void prvMotorPIDTask( void* parameters )
 {
     uint32_t hall_int_count = 0;
     float rpm = 0.0f;
+    float rpm_prev = 0.0f; // Previous RPM for acceleration calculation
     float target_rpm = 0.0f;
+    float acceleration = 0.0f; // Acceleration in RPM/s
     float error = 0.0f;
     float u = 0.0f; // Control signal
     float integral = 0.0f; // Integral term
     float derivative = 0.0f; // Derivative term
     float error_prev = 0.0f; // Previous error for derivative calculation
-
     for (;;)
     {
-        if (xSemaphoreTake(xPIDTimerSemaphore, portMAX_DELAY) == pdTRUE)
+        if (xSemaphoreTake(xPIDTimerSemaphore, pdMS_TO_TICKS(2000)) == pdTRUE)
         {
             /* enter critical section to get count and leave */
             taskENTER_CRITICAL();
@@ -398,19 +399,23 @@ static void prvMotorPIDTask( void* parameters )
             taskEXIT_CRITICAL();
             rpm = count_to_rpm(hall_int_count);
             error = target_rpm - rpm;
-            integral = integral + error * dt; // Integral term
+            integral = (integral + error * dt) * Ki; // Integral term
+            // Prevent integral windup
             derivative = (error - error_prev) / dt; // Derivative term
-            u = Kp * error + Ki * integral + Kd * derivative; // PID control signal
+            /* clamp integral error to avoid windup */
+            u = Kp * error + integral + Kd * derivative; // PID control signal
             error_prev = error; // Update previous error
             // Clamp the control signal to a valid range
-            u = clamp(u, 2, 100); // Assuming u is a percentage value (0-100%)
+            u = clamp(u, 2, 100); // Assuming u is a percentage value (2-100%)
             if (xSemaphoreTake(motor_ctrl.mutex, pdMS_TO_TICKS(20)) == pdTRUE)
             {
-                motor_ctrl.rpm = (int)rpm; // Update RPM in motor control struct
+                motor_ctrl.rpm = rpm; // Update RPM in motor control struct
                 motor_ctrl.pwm = u; // Update PWM value based on control signal
                 xSemaphoreGive(motor_ctrl.mutex);
             }
-            UARTprintf("%d, %d\n", (int)rpm, (int)target_rpm);
+            acceleration = (float)(rpm - rpm_prev) / (float)PID_FREQUENCY; // Calculate acceleration in RPM/s
+            UARTprintf("%d, %d, %d\n", (int)rpm, (int)target_rpm, (int)acceleration);
+            rpm_prev = rpm; // Update previous RPM for next iteration
         }
     }
 }
