@@ -206,6 +206,7 @@ static void prvEmergencyCheckTask(void *pvParameters)
                 motor_ctrl.motor_enabled = false;
                 motor_ctrl.pwm = 1;
                 motor_ctrl.stall_counter = STALL_VAL + 1;
+                motor_ctrl.target_rpm = 0;
                 disableMotor();
                 xSemaphoreGive(motor_ctrl.mutex);
             }
@@ -234,6 +235,7 @@ static void prvEmergencyAckTask(void *pvParameters)
 
                 motor_ctrl.duty_value = PWM_TO_DUTY(motor_ctrl.period_value, motor_ctrl.pwm);
                 setDuty(motor_ctrl.duty_value);
+                enableMotor();
                 xSemaphoreGive(motor_ctrl.mutex);
             }
             UARTprintf("Emergency stop acknowledged\n");
@@ -260,69 +262,45 @@ static void prvButtonTask(void *pvParameters)
             // UARTprintf("Button task started\n");
             if ((ui32ButtonStatus & USR_SW1) == USR_SW1)
             {
-                xSemaphoreGive(xEstop);
-                // // Have as little processing as possible within the locked mutex to prevent unnecesary slow down
-                // if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
-                // {
-                //     if ((motor_ctrl.rpm - BUTTON_RPM_INCREMENT) <= 1)
-                //     {
-                //         // Safety feature
-                //         UARTprintf("\nDuty value too low, setting to disabling motor\n");
-                //         // UARTprintf("\nMotor disabled\n");
-                //         motor_ctrl.motor_enabled = false;
-                //         motor_ctrl.pwm = 1;
-                //         motor_ctrl.target_rpm = 0;
-                //         motor_ctrl.stall_counter = STALL_VAL+1;
-                //         disableMotor();
-                //     }
-                //     else
-                //     {
-                //         motor_ctrl.target_rpm -= BUTTON_RPM_INCREMENT;
-                //     }
-                //     // UARTprintf("Duty value %d\n", motor_ctrl.duty_value);
-                //     xSemaphoreGive(motor_ctrl.mutex);
-                // }
+                if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
+                {
+                    if ((motor_ctrl.rpm - BUTTON_RPM_INCREMENT) <= 1)
+                    {
+                        xSemaphoreGive(xEstop);
+                    }
+                    else
+                    {
+                        motor_ctrl.target_rpm -= BUTTON_RPM_INCREMENT;
+                    }
+                    xSemaphoreGive(motor_ctrl.mutex);
+                }
                 g_pui32ButtonPressed = USR_SW1;
             }
             else if ((ui32ButtonStatus & USR_SW2) == USR_SW2)
             {
-                xSemaphoreGive(xEstopAcknowledge);
-                // if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
-                // {
-                //     if (motor_ctrl.motor_enabled == false)
-                //     {
-                //         /* Renables the motors within this task as it often requires rapid reaction */
-                //         UARTprintf("\nMotor Re-enabled after stall\n");
-                //         motor_ctrl.motor_enabled = true;
-                //         motor_ctrl.stall_counter = 0;
-                //         motor_ctrl.pwm = 30; //30%
-                //         motor_ctrl.target_rpm = 1000;
-                //         getHallSensorValues(motor_ctrl.hall_sensor_values);
-                //         updateMotor(motor_ctrl.hall_sensor_values[0],
-                //                     motor_ctrl.hall_sensor_values[1],
-                //                     motor_ctrl.hall_sensor_values[2]);
-                        
-                //         motor_ctrl.duty_value = PWM_TO_DUTY(motor_ctrl.period_value, motor_ctrl.pwm);   
-                //         setDuty(motor_ctrl.duty_value);
-                //         enableMotor();
-                //     }
-                //     // prevents the duty cycle from going out of range
-                //     //Prevents the pwm from going past 100%
-                //     else if ((motor_ctrl.pwm + BUTTON_DUTY_INCREMENT) >= 96)
-                //     {
-                //         // Safety feature
-                //         UARTprintf("\nDUTY VALUE MAXED OUT\n");
+                if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
+                {
+                    if (motor_ctrl.motor_enabled == false)
+                    {
+                        xSemaphoreGive(xEstopAcknowledge);
+                    }
+                    // prevents the duty cycle from going out of range
+                    //Prevents the pwm from going past 100%
+                    else if ((motor_ctrl.pwm + BUTTON_DUTY_INCREMENT) >= 96)
+                    {
+                        // Safety feature
+                        UARTprintf("\nDUTY VALUE MAXED OUT\n");
 
-                //         //Sends the motor down to a slightly safer value
-                //         motor_ctrl.pwm = 90;
-                //     }
-                //     else
-                //     {
-                //         motor_ctrl.target_rpm += BUTTON_RPM_INCREMENT; // Increase target RPM
-                //     }
-                //     // UARTprintf("Duty value %d\n", motor_ctrl.duty_value);
-                //     xSemaphoreGive(motor_ctrl.mutex);
-                // }
+                        //Sends the motor down to a slightly safer value
+                        motor_ctrl.pwm = 90;
+                    }
+                    else
+                    {
+                        motor_ctrl.target_rpm += BUTTON_RPM_INCREMENT; // Increase target RPM
+                    }
+                    // UARTprintf("Duty value %d\n", motor_ctrl.duty_value);
+                    xSemaphoreGive(motor_ctrl.mutex);
+                }
                 g_pui32ButtonPressed = USR_SW2;
             }
         }
@@ -390,7 +368,7 @@ static void prvMotorPIDTask( void* parameters )
                 }
                 xSemaphoreGive(motor_ctrl.mutex);
             }
-            acceleration = (float)(rpm - rpm_prev) / (float)PID_FREQUENCY; // Calculate acceleration in RPM/s
+            acceleration = (float)(rpm - rpm_prev) * (float)PID_FREQUENCY; // Calculate acceleration in RPM/s
             UARTprintf("%d, %d, %d\n", (int)rpm, (int)target_rpm, (int)acceleration);
             rpm_prev = rpm; // Update previous RPM for next iteration
         }
