@@ -146,7 +146,7 @@ void vCreateLightSensorTask(void)
 
     xTaskCreate(prvLightSensorTask,
                 "Light Sensor Sensing",
-                configMINIMAL_STACK_SIZE,
+                512,
                 NULL,
                 tskIDLE_PRIORITY+1,
                 NULL);
@@ -223,7 +223,7 @@ static void prvLightSensorTask(void *pvParameters)
                 //UARTprintf("Lux: %d\n",  xMessage.uRaw);
                 if (xQueueSend(xLightQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
                 {
-                    UARTprintf("Data sent to queue: %d\n", (int)convertedLux);
+                    // UARTprintf("Data sent to queue: %d\n", (int)convertedLux);
                 }
                 else
                 {

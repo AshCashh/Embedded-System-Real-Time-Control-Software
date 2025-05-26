@@ -117,6 +117,7 @@ static void prvConfigureUART(void);
 static void prvConfigureI2C(void); // configures I2C for sensor communication
 static void prvBMI160DataReady(void);
 static void prvDisplayInit(void);
+void clearI2CBus(void);
 
 
 
@@ -137,6 +138,7 @@ int main( void )
     // xEventGroup = xEventGroupCreate();
     prvSetupHardware();
     UARTprintf("[S]     Starting System\n");
+    clearI2CBus();
     // if (xEventGroup == NULL)
     // {
     //     UARTprintf("Failed to create Event Group\n");
@@ -174,10 +176,6 @@ int main( void )
     {
         UARTprintf("Queue creation failed\n");
     }
-    else
-    {
-        UARTprintf("Queues Created\n");
-    }
  
 
     /* Create the binary semaphore used to synchronize the button ISR and the
@@ -196,12 +194,12 @@ int main( void )
     {
         taskENTER_CRITICAL();
         /* Configure application specific hardware and initialize the task thread. */
-        vCreateLightSensorTask();
-        vCreateDisplayTask();
         vCreateAccelTask();
+        vCreateDisplayTask();
+        vCreateLightSensorTask();
         /* Start the tasks and timer running. */
-        vTaskStartScheduler();
         taskEXIT_CRITICAL();
+        vTaskStartScheduler();
         UARTprintf("    Tasks Created\n");
     }
     else {
@@ -217,6 +215,35 @@ int main( void )
     for( ;; );
 }
 /*-----------------------------------------------------------*/
+
+void clearI2CBus(void) {
+    // Force SDA and SCL GPIO control
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPION);
+    while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPION));
+
+    GPIOPinTypeGPIOOutput(GPIO_PORTN_BASE, GPIO_PIN_4 | GPIO_PIN_5);
+
+    // Simulate 9 clock pulses on SCL to recover stuck slave
+    for (int i = 0; i < 9; i++) {
+        GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_5, 0); // SCL low
+        SysCtlDelay(g_ui32SysClock / 100000);         // ~10us
+        GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_5, GPIO_PIN_5); // SCL high
+        SysCtlDelay(g_ui32SysClock / 100000);
+    }
+
+    // Generate a STOP condition: SDA goes high while SCL is high
+    GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_4, 0); // SDA low
+    SysCtlDelay(g_ui32SysClock / 100000);
+    GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_5, GPIO_PIN_5); // SCL high
+    SysCtlDelay(g_ui32SysClock / 100000);
+    GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_4, GPIO_PIN_4); // SDA high
+
+    // Restore I2C pin function
+    GPIOPinConfigure(GPIO_PN5_I2C2SCL);
+    GPIOPinConfigure(GPIO_PN4_I2C2SDA);
+    GPIOPinTypeI2CSCL(GPIO_PORTN_BASE, GPIO_PIN_5);
+    GPIOPinTypeI2C(GPIO_PORTN_BASE, GPIO_PIN_4);
+}
 
 // SMBus Interrupt for PORT P Pin 2 (OPT_INT)
 static void prvConfigSMBusINT(void) {
@@ -349,6 +376,7 @@ void prvConfigureHWTimer(void)
     TimerEnable(TIMER0_BASE, TIMER_A);
 }
 /*-----------------------------------------------------------*/
+
 
 static void prvDisplayInit(void) {
     //
