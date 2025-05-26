@@ -1216,7 +1216,7 @@ static void prvDisplayTask(void *pvParameters)
             }
         }
         if (g_ui32Panel == 2 && g_eCurrentPlot == PLOT_ACCEL && g_bAccelPlotEnabled){
-            if (xQueueReceive(xAccelQueue, &(xRxedStructure), (TickType_t)10) == pdPASS)
+            if (xQueueReceive(xAccelQueue, &xRxedStructure, (TickType_t)10) == pdPASS)
             {
                 g_ui32AccelDataBuffer[g_ui32AccelDataIndex] = xRxedStructure.uRaw;
                 g_ui32AccelDataIndex = (g_ui32AccelDataIndex + 1) % ACCEL_DATA_BUFFER_SIZE;

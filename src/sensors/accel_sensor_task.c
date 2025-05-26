@@ -273,13 +273,13 @@ static void prvAccelTask(void *pvParameters)
             xMessage.uRaw = (uint32_t)(avgAbsAccel_raw * 100); 
             if (xQueueSend(xAccelQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
             {
-                UARTprintf("Accel sent: %lu\n", xMessage.uRaw);
+                // UARTprintf("Accel sent: %d\n", xMessage.uRaw);
             }
             else
             {
-                //UARTprintf("Error ACCEL: Failed to send data to the queue\n");
+                // UARTprintf("Error ACCEL: Failed to send data to the queue\n");
             }
-            UARTprintf("%d.%d\n", (int)avgAbsAccel,(int)(avgAbsAccel * 100) % 100);
+            // UARTprintf("%d.%d\n", (int)avgAbsAccel,(int)(avgAbsAccel * 100) % 100);
             //if (counter == 100)
             //{
                 //UARTprintf("|%d\n", seconds++);
