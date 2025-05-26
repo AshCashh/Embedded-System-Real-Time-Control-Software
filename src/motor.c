@@ -320,6 +320,7 @@ static void prvButtonTask(void *pvParameters)
                         // UARTprintf("\nMotor disabled\n");
                         motor_ctrl.motor_enabled = false;
                         motor_ctrl.pwm = 1;
+                        motor_ctrl.target_rpm = 0;
                         motor_ctrl.stall_counter = STALL_VAL+1;
                         disableMotor();
                     }
@@ -343,6 +344,7 @@ static void prvButtonTask(void *pvParameters)
                         motor_ctrl.motor_enabled = true;
                         motor_ctrl.stall_counter = 0;
                         motor_ctrl.pwm = 30; //30%
+                        motor_ctrl.target_rpm = 1000;
                         getHallSensorValues(motor_ctrl.hall_sensor_values);
                         updateMotor(motor_ctrl.hall_sensor_values[0],
                                     motor_ctrl.hall_sensor_values[1],
@@ -411,6 +413,25 @@ static void prvMotorPIDTask( void* parameters )
             {
                 motor_ctrl.rpm = rpm; // Update RPM in motor control struct
                 motor_ctrl.pwm = u; // Update PWM value based on control signal
+                if ((motor_ctrl.stall_counter < STALL_VAL) && (motor_ctrl.rpm == 0))
+                {
+                    // UARTprintf("Motor Stalling\n");
+                    motor_ctrl.stall_counter++;
+                }
+                else if (motor_ctrl.rpm > 0)
+                {
+                    motor_ctrl.stall_counter = 0;
+                }
+                else if (motor_ctrl.stall_counter >= STALL_VAL)
+                {
+
+                    // UARTprintf("Motor Stalled\n");
+                    motor_ctrl.target_rpm = 0;
+                    integral = 0.0f;
+                    motor_ctrl.motor_enabled = false;
+                    motor_ctrl.stall_counter = STALL_VAL + 1;
+                    disableMotor();
+                }
                 xSemaphoreGive(motor_ctrl.mutex);
             }
             acceleration = (float)(rpm - rpm_prev) / (float)PID_FREQUENCY; // Calculate acceleration in RPM/s
