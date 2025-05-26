@@ -1222,7 +1222,7 @@ static void prvDisplayTask(void *pvParameters)
                 g_ui32AccelDataIndex = (g_ui32AccelDataIndex + 1) % ACCEL_DATA_BUFFER_SIZE;
                 //UARTprintf("Accel Data: %d, Count: %d\n", g_ui32AccelDataBuffer[g_ui32AccelDataIndex], g_ui32AccelDataCount);
                 uint32_t prevIndex = (g_ui32AccelDataIndex == 0) ? (ACCEL_DATA_BUFFER_SIZE - 1) : (g_ui32AccelDataIndex - 1);
-                UARTprintf("Accel Data: %d, Count: %d\n", g_ui32AccelDataBuffer[prevIndex], g_ui32AccelDataCount);
+                // UARTprintf("Accel Data: %d, Count: %d\n", g_ui32AccelDataBuffer[prevIndex], g_ui32AccelDataCount);
                
                 if (g_ui32AccelDataCount < ACCEL_DATA_BUFFER_SIZE)
                     g_ui32AccelDataCount++;

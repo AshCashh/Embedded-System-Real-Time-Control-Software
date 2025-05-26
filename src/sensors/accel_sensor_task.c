@@ -160,7 +160,7 @@ void vCreateAccelTask(void)
 
     xTaskCreate(prvAccelTask,
                 "Accel Task",
-                configMINIMAL_STACK_SIZE, // Increased stack size for BMI160 operations
+                512, // Increased stack size for BMI160 operations
                 NULL,
                 tskIDLE_PRIORITY +1,
                 NULL);
@@ -280,14 +280,14 @@ static void prvAccelTask(void *pvParameters)
                 // UARTprintf("Error ACCEL: Failed to send data to the queue\n");
             }
             // UARTprintf("%d.%d\n", (int)avgAbsAccel,(int)(avgAbsAccel * 100) % 100);
-            //if (counter == 100)
-            //{
-                //UARTprintf("|%d\n", seconds++);
-            //     UBaseType_t watermark = uxTaskGetStackHighWaterMark(NULL);
-            //     UARTprintf("[D] Stack high watermark: %d\n", watermark);
-                //counter = 0;
-            //}
-            //counter++;
+            // if (counter == 500)
+            // {
+            //     UARTprintf("|%d\n", seconds++);
+            //     // UBaseType_t watermark = uxTaskGetStackHighWaterMark(NULL);
+            //     // UARTprintf("[D] Stack high watermark: %d\n", watermark);
+            //     counter = 0;
+            // }
+            // counter++;
 
             // UARTprintf("Filtered Accel: X: %d, Y: %d, Z: %d\n",
             //    (int)(filteredX * 1000),

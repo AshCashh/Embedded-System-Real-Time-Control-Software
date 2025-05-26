@@ -21,7 +21,7 @@
  * ------------------------------------------------------------------------------------------------
  */
 
- extern uint32_t g_ui32SysClock;
+extern uint32_t g_ui32SysClock;
 
 /* Slave address */
 #define BMI160_IC2_ADDRESS_GND 0x68   // address if SDO pin is pulled to GND
@@ -86,25 +86,16 @@ bool sensorBMI160Init(void)
     uint8_t pwr_conf = 0x00;
     writeI2C_acc(0x69, 0x6C, &pwr_conf, 1);
     vTaskDelay(pdMS_TO_TICKS(10));
-    
 
     // enable accelerometer
-    // Repeatedly attempt to set accel to normal mode (it wont wake up sometimes)
-    uint8_t pwd = 0x00;
-    while (pwd == 0x00)
+    val = 0x11;
+    writeI2C_acc(BMI160_IC2_ADDRESS_VDDIO, 0x7E, &val, 1);
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    readI2C(BMI160_IC2_ADDRESS_VDDIO, REG_PMU_STATUS, &val); // PMU_STATUS
+    if ((val & 0x30) == 0x10)
     {
-        val = 0x11;
-        writeI2C_acc(BMI160_IC2_ADDRESS_VDDIO, 0x7E, &val, 1);
-        vTaskDelay(pdMS_TO_TICKS(10));
-
-        readI2C(BMI160_IC2_ADDRESS_VDDIO, REG_PMU_STATUS, &val); // PMU_STATUS
-        if ((val & 0x30) == 0x10)
-        {
-            UARTprintf("[W] Accel in Normal Mode\n");
-            break;
-        }
-
-        UARTprintf("[!] Accel still in suspend (PMU_STATUS: 0x%02X), retrying...\n", val);
+        UARTprintf("[W] Accel in Normal Mode\n");
     }
 
     uint8_t acc_range = 0b0011;
@@ -114,7 +105,7 @@ bool sensorBMI160Init(void)
     }
     vTaskDelay(pdMS_TO_TICKS(10));
     // config accelerometer
-    val =  0x28; // freq
+    val = 0x28; // freq
     if (!writeI2C_acc(BMI160_IC2_ADDRESS_VDDIO, REG_ACC_CONF, &val, 1))
     {
         return false;
@@ -122,7 +113,7 @@ bool sensorBMI160Init(void)
 
     /* ------ Set up Interrupts on chip ------ */
     // map data ready interrupt to INT1
-    uint8_t int1_en_dr = (1 << 7); // enable data ready interrupt 
+    uint8_t int1_en_dr = (1 << 7); // enable data ready interrupt
     if (!writeI2C_acc(BMI160_IC2_ADDRESS_VDDIO, REG_DR_INT_MAP, &int1_en_dr, 1))
     {
         return false;
@@ -189,13 +180,16 @@ bool sensorBMI160Test(void)
 {
     UARTprintf("FINDING CHIP ID:\n");
     uint8_t val = 0;
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 10; i++)
+    {
         readI2C(BMI160_IC2_ADDRESS_VDDIO, REG_CHIP_ID, &val);
-        if (val == CHIP_ID) break;
+        if (val == CHIP_ID)
+            break;
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 
-    if (val != CHIP_ID) {
+    if (val != CHIP_ID)
+    {
         UARTprintf("[!] Chip ID failed: 0x%02X\n", val);
         return false;
     }
@@ -204,9 +198,9 @@ bool sensorBMI160Test(void)
     return true;
 }
 
-
 // config BMI160 data ready interrupt on Port P Pin 3
-static void prvBMI160DataReady(void) {
+static void prvBMI160DataReady(void)
+{
     // Enable GPIO port for the INT pin
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOD);
 
