@@ -81,6 +81,7 @@ extern motorcontrol_t motor_ctrl;
 
 volatile float latest_rpm;
 volatile uint32_t last_tick = 0;
+uint32_t last_hall_update = 0;
 /*
  * Time stamp global variable.
  */
@@ -323,9 +324,9 @@ static void prvMotorPIDTask(void *parameters)
     /* Ramp RPM to limit acceleration exceeding */
     static float ramped_target_rpm = 0.0f;
     /* RPM limit vars */
-    const float max_accel_delta = MAX_ACCELERATION_RPMS * dt;
+    const float max_accel_delta = (MAX_ACCELERATION_RPMS * dt);
     /* consider only regular deceleration for now */
-    const float max_decel_delta = MAX_DECELERATION_RPMS * dt;
+    const float max_decel_delta = (MAX_DECELERATION_RPMS * dt);
     prvMotorStart();
 
     for (;;)
@@ -334,7 +335,13 @@ static void prvMotorPIDTask(void *parameters)
             continue;
 
         taskENTER_CRITICAL();
-        float raw_rpm = latest_rpm;
+        float raw_rpm = 0;
+        /* clear stale data */
+        if ((last_hall_update - xTaskGetTickCount()) > pdMS_TO_TICKS(800))
+        {
+            raw_rpm = 0;
+        }
+        raw_rpm = latest_rpm;
         taskEXIT_CRITICAL();
         rpm_sum -= rpm_buffer[rpm_index];
         rpm_buffer[rpm_index] = raw_rpm;
@@ -409,7 +416,6 @@ static void prvMotorPIDTask(void *parameters)
 
 /*-----------------------------------------------------------*/
 /* Interrupt handlers */
-
 void HallSensorHandler(void)
 {
     /*
@@ -428,9 +434,9 @@ void HallSensorHandler(void)
     GPIOIntClear(GPIO_PORTH_BASE, ui32StatusH);
     GPIOIntClear(GPIO_PORTN_BASE, ui32StatusN);
 
-    uint32_t now = xTaskGetTickCountFromISR();
-    uint32_t tick_delta = now - last_tick;
-    last_tick = now;
+    last_hall_update = xTaskGetTickCountFromISR();
+    uint32_t tick_delta = last_hall_update - last_tick;
+    last_tick = last_hall_update;
     float minute_delta = TICKS_TO_MINUTES(tick_delta);
     latest_rpm = 1 / (COUNT_PER_REVOLUTION * minute_delta);
     int tmp[3] = {0, 0, 0};

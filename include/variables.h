@@ -73,13 +73,9 @@ static inline float count_to_rpm(int count)
 }
 #define MOVING_AVERAGE_SAMPLES  30
 
-// #define Kp  0.2f   // 10× larger
-// #define Ki  0.24f  // 10× smaller
-// #define Kd  1.0f  // a bit stronger damping
-
 #define Kp   0.05f
-#define Ki   0.16f   // (Ki_speed * dt) ≈ 0.002 per tick
-#define Kd   0.08f   // (Kd_speed / dt) ≈ 1.0 per tick
+#define Ki   0.04f 
+#define Kd   0.04f 
 
 #define dt 1/PID_FREQUENCY 
 #define EPSILON 1e-6f
