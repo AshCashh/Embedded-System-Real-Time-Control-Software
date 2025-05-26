@@ -109,7 +109,7 @@ void HallSensorHandler(void);
 static void prvMotorTask(void *pvParameters);
 static void prvButtonTask(void *pvParameters);
 static void prvMotorPIDTask(void *pvParameters);
-
+static void prvMotorStart(void);
 /*
  * Called by main() to create the Hello print task.
  */
@@ -139,12 +139,6 @@ void vCreateMotorTask(void)
      *  - The task handle is NULL */
 
     xMotorTimestampQueue = xQueueCreate(10, sizeof(uint32_t));
-    xTaskCreate(prvMotorTask,
-                "MotorTask",
-                configMINIMAL_STACK_SIZE,
-                NULL,
-                tskIDLE_PRIORITY + 1,
-                NULL);
     xTaskCreate(prvButtonTask,
                 "ButtonTask",
                 configMINIMAL_STACK_SIZE,
@@ -157,122 +151,6 @@ void vCreateMotorTask(void)
                 NULL,
                 tskIDLE_PRIORITY + 2,
                 NULL);
-}
-/*-----------------------------------------------------------*/
-
-static void prvMotorTask(void *pvParameters)
-{
-    //
-
-    UARTprintf("Motor task started\n");
-    if (motor_ctrl.mutex == NULL)
-    {
-        // Handle error
-        UARTprintf("Failed to create mutex\n");
-    }
-
-    // configure buttons
-    prvConfigureButton();
-    if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
-    {
-        /* Initialise the motors and set the duty cycle (speed) in microseconds */
-        initMotorLib(motor_ctrl.period_value);
-
-        motor_ctrl.duty_value = PWM_TO_DUTY(motor_ctrl.period_value, motor_ctrl.pwm);
-        setDuty(motor_ctrl.duty_value);
-        motor_ctrl.motor_enabled = true;
-        motor_ctrl.stall_counter = 0;
-        motor_ctrl.acceleration = 0;
-        xSemaphoreGive(motor_ctrl.mutex);
-    }
-    else
-    {
-        // Handle error
-        UARTprintf("Failed to take mutex\n");
-    }
-    /* start motor phase cycle */
-    enableMotor();
-    /* Kick start the motor */
-    // Do an initial read of the hall effect sensor GPIO lines
-    /* read hall sensor gpio lines */
-    UARTprintf("Getting hall values\n");
-    if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
-    {
-        getHallSensorValues(motor_ctrl.hall_sensor_values);
-        updateMotor(motor_ctrl.hall_sensor_values[0],
-                    motor_ctrl.hall_sensor_values[1],
-                    motor_ctrl.hall_sensor_values[2]);
-        xSemaphoreGive(motor_ctrl.mutex);
-    }
-    else
-    {
-        // Handle error
-        UARTprintf("Failed to take mutex\n");
-    }
-
-    // give the read hall effect sensor lines to updateMotor() to move the motor
-    // one single phase
-    // Recommendation is to use an interrupt on the hall effect sensors GPIO lines
-    // So that the motor continues to be updated every time the GPIO lines change from high to low
-    // or low to high
-    // Include the updateMotor function call in the ISR to achieve this behaviour.
-
-    /* Motor test - ramp up the duty cycle from 10% to 100%, than stop the motor */
-    // The Values below are before intialisation so the program stops yelling at me, they will never need to be used
-    uint32_t rpm = 0, acceleration = 0, pwm = 5, period_value = 100,duty_value = PWM_TO_DUTY(period_value, pwm);
-    bool motor_enabled = false;
-    for (;;)
-    {
-        if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
-        {
-            // UARTprintf("Motor task mutex taken\n");
-            pwm = motor_ctrl.pwm;
-            period_value = motor_ctrl.period_value;
-
-            //update duty value
-            motor_ctrl.duty_value = PWM_TO_DUTY(period_value, pwm);
-
-            duty_value = motor_ctrl.duty_value;
-            
-            rpm = motor_ctrl.rpm;
-            acceleration = motor_ctrl.acceleration;
-            motor_enabled = motor_ctrl.motor_enabled;
-            // printMotorStatus(&motor_ctrl);
-            // UARTprintf("%d\n", motor_ctrl.rpm);
-            xSemaphoreGive(motor_ctrl.mutex);
-        }
-
-        if (motor_enabled)
-        {
-
-            if ((0 >= duty_value) || (duty_value <= period_value))
-            {
-                // UARTprintf("Setting duty cycle to %d%%\n", duty_value);
-                setDuty(duty_value);
-            }
-            else
-            {
-                // additional saftey feature, shouldn't happen, but incase it does
-                // stopMotor(1);
-                disableMotor();
-                UARTprintf("INVALID DUTY_CYCLE\n");
-                break;
-            }
-            // UARTprintf("\rDuty cycle: %d  PWM:%d  RPM: %d  Acceleration(RPM/s): %d   ", duty_value,pwm,rpm,acceleration);
-        }
-        else
-        {
-            if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
-            {
-                if (motor_ctrl.stall_counter > STALL_VAL)
-                {
-                    UARTprintf("\rMotor disabled");
-                    disableMotor();
-                }
-                xSemaphoreGive(motor_ctrl.mutex);
-            }
-        }
-    }
 }
 /*-----------------------------------------------------------*/
 static void prvConfigureButton(void)
@@ -389,6 +267,7 @@ static void prvMotorPIDTask( void* parameters )
     float integral = 0.0f; // Integral term
     float derivative = 0.0f; // Derivative term
     float error_prev = 0.0f; // Previous error for derivative calculation
+    prvMotorStart(); // Start the motor and initialize the control
     for (;;)
     {
         if (xSemaphoreTake(xPIDTimerSemaphore, pdMS_TO_TICKS(2000)) == pdTRUE)
@@ -401,11 +280,11 @@ static void prvMotorPIDTask( void* parameters )
             taskEXIT_CRITICAL();
             rpm = count_to_rpm(hall_int_count);
             error = target_rpm - rpm;
-            integral = (integral + error * dt) * Ki; // Integral term
+            integral = integral + error * dt; // Integral term
             // Prevent integral windup
             derivative = (error - error_prev) / dt; // Derivative term
             /* clamp integral error to avoid windup */
-            u = Kp * error + integral + Kd * derivative; // PID control signal
+            u = Kp * error + Ki * integral + Kd * derivative; // PID control signal
             error_prev = error; // Update previous error
             // Clamp the control signal to a valid range
             u = clamp(u, 2, 100); // Assuming u is a percentage value (2-100%)
@@ -413,6 +292,8 @@ static void prvMotorPIDTask( void* parameters )
             {
                 motor_ctrl.rpm = rpm; // Update RPM in motor control struct
                 motor_ctrl.pwm = u; // Update PWM value based on control signal
+                motor_ctrl.duty_value = PWM_TO_DUTY(motor_ctrl.period_value, motor_ctrl.pwm);
+                setDuty(motor_ctrl.duty_value); // Set the duty cycle for the motor
                 if ((motor_ctrl.stall_counter < STALL_VAL) && (motor_ctrl.rpm == 0))
                 {
                     // UARTprintf("Motor Stalling\n");
@@ -527,4 +408,53 @@ void xPIDTimerHandler(void)
 
     /*give the semaphore*/
     portYIELD_FROM_ISR(xPIDTaskWoken);
+}
+
+void prvMotorStart()
+{
+    UARTprintf("Motor task started\n");
+    if (motor_ctrl.mutex == NULL)
+    {
+        // Handle error
+        UARTprintf("Failed to create mutex\n");
+    }
+
+    // configure buttons
+    prvConfigureButton();
+    if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
+    {
+        /* Initialise the motors and set the duty cycle (speed) in microseconds */
+        initMotorLib(motor_ctrl.period_value);
+
+        motor_ctrl.duty_value = PWM_TO_DUTY(motor_ctrl.period_value, motor_ctrl.pwm);
+        setDuty(motor_ctrl.duty_value);
+        motor_ctrl.motor_enabled = true;
+        motor_ctrl.stall_counter = 0;
+        motor_ctrl.acceleration = 0;
+        xSemaphoreGive(motor_ctrl.mutex);
+    }
+    else
+    {
+        // Handle error
+        UARTprintf("Failed to take mutex\n");
+    }
+    /* start motor phase cycle */
+    enableMotor();
+    /* Kick start the motor */
+    // Do an initial read of the hall effect sensor GPIO lines
+    /* read hall sensor gpio lines */
+    UARTprintf("Getting hall values\n");
+    if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
+    {
+        getHallSensorValues(motor_ctrl.hall_sensor_values);
+        updateMotor(motor_ctrl.hall_sensor_values[0],
+                    motor_ctrl.hall_sensor_values[1],
+                    motor_ctrl.hall_sensor_values[2]);
+        xSemaphoreGive(motor_ctrl.mutex);
+    }
+    else
+    {
+        // Handle error
+        UARTprintf("Failed to take mutex\n");
+    }
 }

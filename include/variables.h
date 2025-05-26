@@ -54,7 +54,7 @@
 
 
 
-#define PID_FREQUENCY 20   //Hz
+#define PID_FREQUENCY 120   //Hz
 
 #define STALL_VAL STALL_DURATION*PID_FREQUENCY
 
@@ -74,7 +74,7 @@ static inline float count_to_rpm(int count)
 #define dt 1/PID_FREQUENCY
 #define clamp(value, min, max) \
     ((value < min) ? min : ((value > max) ? max : value))
-#define BUTTON_RPM_INCREMENT 1000 // RPM increment for button press
+#define BUTTON_RPM_INCREMENT 100 // RPM increment for button press
 /* 
     Commutation phases for 3 phase BLDC with INHC = 1
     Phase F loops back to phase A per revolution 
