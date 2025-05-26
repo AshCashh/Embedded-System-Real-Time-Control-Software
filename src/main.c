@@ -110,11 +110,19 @@ SemaphoreHandle_t xButtonSemaphore = NULL;
 SemaphoreHandle_t xPIDTimerSemaphore = NULL;
 SemaphoreHandle_t xI2CMasterSemaphore = NULL;
 SemaphoreHandle_t xCountMutex = NULL;
+SemaphoreHandle_t xEstop = NULL;
+SemaphoreHandle_t xEstopAcknowledge = NULL;
+
+/*-----------------------------------------------------------*/
+
 int main( void )
 {   
     xButtonSemaphore = xSemaphoreCreateBinary();
     xPIDTimerSemaphore = xSemaphoreCreateBinary();
     xI2CMasterSemaphore = xSemaphoreCreateBinary();
+    xEstop = xSemaphoreCreateBinary();
+    xEstopAcknowledge = xSemaphoreCreateBinary();
+
     xCountMutex = xSemaphoreCreateMutex();
     motor_ctrl.mutex = xSemaphoreCreateMutex();
     motor_ctrl.pwm = 25;

@@ -114,6 +114,7 @@ typedef struct
     uint32_t hall_currents[3]; /* hall sensor currents */
     bool motor_enabled; /* stall prevention flag */
     bool brake; /* brake flag */
+    bool Estop; /* emergency stop flag */
     uint8_t stall_counter; /* reactivation count */
     float rpm; /* current rpm value */
     float target_rpm; /* target rpm value */
