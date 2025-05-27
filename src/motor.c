@@ -381,6 +381,7 @@ static void prvMotorPIDTask(void *parameters)
             ramped_target_rpm -= max_decel_delta;
         } else {
             ramped_target_rpm = local_target_rpm;
+            /* use actual rpm to as reference now */
         }
 
         /* PID loop */
@@ -404,8 +405,9 @@ static void prvMotorPIDTask(void *parameters)
         setDuty(local_duty);
         if (need_disable) disableMotor();
 
-        UARTprintf("RPM: %d, Target: %d, AvgAccel: %d, Ramped Target RPM: %d\n",
+        UARTprintf("%d, %d, %d, %d, %d\n",
                    (int)rpm,
+                   (int)raw_rpm,
                    (int)local_target_rpm,
                    (int)avg_acceleration,
                    (int)ramped_target_rpm);

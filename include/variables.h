@@ -71,11 +71,11 @@ static inline float count_to_rpm(int count)
 {
     return ((float)count / COUNT_PER_REVOLUTION) * PID_FREQUENCY * SECONDS_PER_MINUTE;
 }
-#define MOVING_AVERAGE_SAMPLES  30
-
-#define Kp   0.05f
-#define Ki   0.04f 
-#define Kd   0.04f 
+#define MOVING_AVERAGE_SAMPLES  100
+/* PID variables */
+#define Kp 0.0012 /* Proportional gain */
+#define Kd 0.0006 /* Derivative gain */
+#define Ki 0.038  /* Integral gain */
 
 #define dt 1/PID_FREQUENCY 
 #define EPSILON 1e-6f
