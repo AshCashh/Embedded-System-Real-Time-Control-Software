@@ -15,8 +15,8 @@
 #define EVENT_BTN_TOGGLE (1 << 2)
 
 // Threshold values
-#define HIGH_THRESHOLD 1000
-#define LOW_THRESHOLD 50
+#define HIGH_THRESHOLD 6
+#define LOW_THRESHOLD 5
 
 #define FILTER_SIZE 10
 // Structure for message queue

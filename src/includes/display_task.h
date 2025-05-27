@@ -11,4 +11,3 @@ void xTimerHandler(void);
 #endif // DISPLAY_TASK_H
 
 static uint32_t accel_threshold = 100;
-static bool day = false;

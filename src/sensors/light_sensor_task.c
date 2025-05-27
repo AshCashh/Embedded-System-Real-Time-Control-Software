@@ -125,7 +125,6 @@ extern SemaphoreHandle_t xSampleLightSemaphore;
 extern uint32_t g_ui32SysClock;
 extern bool day;
 
-
 /* Event bits */
 #define EVENT_HIGH_THRESHOLD (1 << 0)
 #define EVENT_LOW_THRESHOLD (1 << 1)
@@ -238,10 +237,6 @@ static void prvLightSensorTask(void *pvParameters)
                 xMessage.ulTimeStamp = xTaskGetTickCount();
                 xMessage.uFiltered = filteredLux;
                 xMessage.uRaw = convertedLux;
-                if (filteredLux > 40)
-                    day = true;
-                else
-                    day = false;
                 //UARTprintf("Lux: %d\n",  xMessage.uRaw);
                 if (xQueueSend(xLightQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
                 {
