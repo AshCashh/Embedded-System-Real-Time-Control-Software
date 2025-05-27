@@ -46,7 +46,6 @@
 #include "task.h"
 #include "semphr.h"
 
-#include "semphr.h"
 /* Hardware includes. */
 #include "inc/hw_ints.h"
 #include "inc/hw_memmap.h"
@@ -87,12 +86,28 @@
 #include "drivers/Kentec320x240x16_ssd2119_spi.h"
 #include "drivers/touch.h"
 
+#include "variables.h"
+// Motor lib
+#include <motorlib.h>
+motorcontrol_t motor_ctrl;
+extern void HallSensorHandler(void);
+extern void vCreateMotorTask( void );
+static void prvConfigureHallInts( void );
+static void prvConfigurePIDTimer(void);
+extern void xPIDTimerHandler(void);
+
+static void prvConfigureADCInts(void);
+
+SemaphoreHandle_t xPIDTimerSemaphore = NULL;
+SemaphoreHandle_t xCountMutex = NULL;
+SemaphoreHandle_t xEstop = NULL;
+SemaphoreHandle_t xEstopAcknowledge = NULL;
+SemaphoreHandle_t xPowerMotorCalcsemaphore = NULL;
 /*-----------------------------------------------------------*/
 
 /* The system clock frequency. */
 uint32_t g_ui32SysClock;
 
-volatile uint32_t g_ui32TimeStamp = 0;
 /* Global for binary semaphore shared between tasks. */
 SemaphoreHandle_t xButton1Semaphore = NULL;
 SemaphoreHandle_t xButton2Semaphore = NULL;
@@ -175,6 +190,66 @@ int main(void)
     /* Create the binary semaphore used to synchronize the button ISR and the
      * button processing task. */
     xButton1Semaphore = xSemaphoreCreateBinary();
+    xPIDTimerSemaphore = xSemaphoreCreateBinary();
+    xEstop = xSemaphoreCreateBinary();
+    xEstopAcknowledge = xSemaphoreCreateBinary();
+    xPowerMotorCalcsemaphore = xSemaphoreCreateBinary();
+    xCountMutex = xSemaphoreCreateMutex();
+    motor_ctrl.mutex = xSemaphoreCreateMutex();
+    motor_ctrl.pwm = 25;
+    motor_ctrl.period_value = 50;
+    motor_ctrl.duty_value = PWM_TO_DUTY(motor_ctrl.period_value, motor_ctrl.pwm);
+    motor_ctrl.brake = false;
+    
+
+    // MOTOR
+     /* Configure motor pins */
+    /* Configure ADC1 with ISENCE pins */
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC1);
+    /* Enable GPIO ports for motor phases */
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOG);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOC);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOH);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOM);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPION);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOD);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOG) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOC) ||
+            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOH) ||
+            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOM) ||
+            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPION) ||
+            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA) ||
+            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOD) ||
+            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOE) ||
+            !SysCtlPeripheralReady(SYSCTL_PERIPH_ADC1));
+    /* Configure phase pins as outputs */
+    GPIOPinTypeGPIOOutput(INLA);
+    GPIOPinTypeGPIOOutput(INHB);
+    GPIOPinTypeGPIOOutput(INLB);
+    GPIOPinTypeGPIOOutput(INHC);
+    GPIOPinTypeGPIOOutput(INLC);
+    GPIOPinTypeGPIOOutput(ENA);
+    /* Configure sense pins as inputs */
+    GPIOPinTypeGPIOInput(ISENCE_A);
+    GPIOPinTypeGPIOInput(ISENCE_B);
+    GPIOPinTypeGPIOInput(ISENCE_C);
+    /* Configure Hall sensor pins as inputs */
+    GPIOPinTypeGPIOInput(HALLA);
+    GPIOPinTypeGPIOInput(HALLB);
+    GPIOPinTypeGPIOInput(HALLC);
+    /* Disable brake */
+    GPIOPinWrite(INLC, GPIO_PIN_5);
+    /* Drive forwards */
+    GPIOPinWrite(INHC, 0);
+    /* Set-up interrupts for hall sensors */
+    prvConfigureHallInts();
+    /* Set-up adc interrupts for current measurements */
+    prvConfigureADCInts();
+
     xButton2Semaphore = xSemaphoreCreateBinary();
     xIC2MasterSemaphore = xSemaphoreCreateBinary();
     xSampleLightSemaphore = xSemaphoreCreateBinary();
@@ -187,11 +262,15 @@ int main(void)
     if (xButton1Semaphore != NULL && xButton2Semaphore != NULL && xIC2MasterSemaphore != NULL && xSampleLightSemaphore != NULL && xI2CMutex != NULL && xEmergencyStop != NULL && xEmergencyMutex != NULL)
     {
         taskENTER_CRITICAL();
+        /* Motor Tasks*/
+        
+        prvConfigurePIDTimer();
         /* Configure application specific hardware and initialize the task thread. */
         vCreateAccelTask();
         vCreateDisplayTask();
         vCreateLightSensorTask();
         /* Start the tasks and timer running. */
+        vCreateMotorTask();
         taskEXIT_CRITICAL();
         vTaskStartScheduler();
         UARTprintf("    Tasks Created\n");
@@ -399,6 +478,7 @@ static void prvDisplayInit(void)
 
 static void prvSetupHardware(void)
 {
+    
     /* Run from the PLL at configCPU_CLOCK_HZ MHz. */
     g_ui32SysClock = MAP_SysCtlClockFreqSet((SYSCTL_XTAL_25MHZ |
                                              SYSCTL_OSC_MAIN | SYSCTL_USE_PLL |
@@ -414,6 +494,103 @@ static void prvSetupHardware(void)
     // prvConfigSMBusINT();
     // prvConfigureHWTimer();
     prvConfigureHWTimer(); // timer 0 A
+
+}
+/*-----------------------------------------------------------*/
+static void prvConfigureHallInts( void )
+{
+
+    /* Configure GPIO ports to trigger an interrupt on rising/falling or both edges. */
+    /* set interrupts on Hall sensor pins */
+    GPIOIntTypeSet(
+        GPIO_PORTM_BASE,
+        GPIO_PIN_3,
+        GPIO_BOTH_EDGES
+    );
+    GPIOIntTypeSet(
+        GPIO_PORTH_BASE,
+        GPIO_PIN_2,
+        GPIO_BOTH_EDGES
+    );
+    GPIOIntTypeSet(
+        GPIO_PORTN_BASE,
+        GPIO_PIN_2,
+        GPIO_BOTH_EDGES
+    );
+    /* raise interrupt priority for hallsensorhandler */
+    IntPrioritySet(INT_GPIOM, configMAX_SYSCALL_INTERRUPT_PRIORITY);
+    IntPrioritySet(INT_GPION, configMAX_SYSCALL_INTERRUPT_PRIORITY);
+    IntPrioritySet(INT_GPIOH, configMAX_SYSCALL_INTERRUPT_PRIORITY);
+    /* Enable the GPIO interrupt for Hall sensor pins. */
+    GPIOIntEnable(HALLA);
+    GPIOIntEnable(HALLB);
+    GPIOIntEnable(HALLC);
+    /* Enable the GPIO interrupt handler. */
+    GPIOIntRegister(GPIO_PORTM_BASE, HallSensorHandler);
+    GPIOIntRegister(GPIO_PORTH_BASE, HallSensorHandler);
+    GPIOIntRegister(GPIO_PORTN_BASE, HallSensorHandler);
+    /* Enable pullups */
+    GPIOPadConfigSet(HALLA,
+        GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+    GPIOPadConfigSet(HALLB,
+        GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+    GPIOPadConfigSet(HALLC,
+        GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+    /* Int priority maximum */
+    IntPrioritySet(INT_GPIOM, configMAX_SYSCALL_INTERRUPT_PRIORITY);
+    IntPrioritySet(INT_GPION, configMAX_SYSCALL_INTERRUPT_PRIORITY);
+    IntPrioritySet(INT_GPIOH, configMAX_SYSCALL_INTERRUPT_PRIORITY);
+    /* Clear any prior interrupt flags. */
+    GPIOIntClear(HALLA);
+    GPIOIntClear(HALLB);
+    GPIOIntClear(HALLC);
+
+
+
+    /* Enable global interrupts in the NVIC. */
+    IntMasterEnable();
+}
+static void prvConfigureADCInts(void)
+{
+    /* Configure ADC1 to trigger an interrupt on conversion complete. */
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC1);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_ADC1))
+    {
+        // Wait for ADC1 to be ready
+    }
+    // Configure GPIOE pins as analog inputs
+    //ain0 = PE3, ain1 = PD7
+    GPIOPinTypeADC(GPIO_PORTE_BASE, GPIO_PIN_3);
+    GPIOPinTypeADC(GPIO_PORTD_BASE, GPIO_PIN_7);
+
+    // Configure ADC1 Sequencer 1 (SS1) with processor trigger
+    ADCSequenceConfigure(ADC1_BASE, 1, ADC_TRIGGER_PROCESSOR, 0);
+
+    // Step 0: AIN0 (PE3)
+    ADCSequenceStepConfigure(ADC1_BASE, 1, 0, ADC_CTL_CH0);
+    // Step 1: AIN4 (PE7), with IE and END
+    ADCSequenceStepConfigure(ADC1_BASE, 1, 1, ADC_CTL_CH4 | ADC_CTL_IE | ADC_CTL_END);
+
+    // Enable the sequencer and clear interrupt
+    ADCSequenceEnable(ADC1_BASE, 1);
+    ADCIntClear(ADC1_BASE, 1);
+}
+static void prvConfigurePIDTimer(void)
+{
+    /* Use Timer 2A in full width periodic mode at 100hz */
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER2);
+    TimerConfigure(TIMER2_BASE, TIMER_CFG_PERIODIC);
+    TimerLoadSet(TIMER2_BASE, TIMER_A, (g_ui32SysClock/PID_FREQUENCY)); // 10 ms
+    /* Configure the Timer 2A interrupt for timeout. */
+    TimerIntEnable(TIMER2_BASE, TIMER_TIMA_TIMEOUT);
+    /* Enable the Timer 2A interrupt in the NVIC. */
+    IntEnable(INT_TIMER2A);
+    /* Enable global interrupts in the NVIC. */
+    IntMasterEnable();
+    /* Register the Timer 2A interrupt handler. */
+    TimerIntRegister(TIMER2_BASE, TIMER_A, xPIDTimerHandler);
+    /* Start the timer used in this example Task */
+    TimerEnable(TIMER2_BASE, TIMER_A);
 }
 /*-----------------------------------------------------------*/
 
