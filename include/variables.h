@@ -111,6 +111,30 @@ static inline float clamp(float value, float min, float max)
     ((pin))
 #define MICROSECONDS_TO_RPM(time_delta_ms)\
     ((1000*60)/(time_delta_ms*6)) /* 6 steps per revolution */
+/*Current measure Variales*/
+
+#define VREF 3.3f /* Reference voltage for ADC */
+#define RSHUNT 0.007f /* Shunt resistor value in ohms */
+#define GAIN 10.0f /* Gain of the current sense amplifier with a 47K resistor */
+
+#define ADC_MAX_VALUE 4095.0f /* Maximum ADC value for 12-bit resolution */
+
+#define ADC_CURRENT_SAMPLES 1 /* Number of samples to average for current measurement */
+
+#define AMPS_TO_MILLIAMPS(amps) \
+    ((amps) * 1000.0f) /* Convert amps to milliamps for display */
+
+#define Squared(x) \
+    (float)((x) * (x)) /* Square a value */
+
+
+typedef struct AMessage
+{
+    uint32_t ulTimeStamp;
+    uint32_t uRaw;
+    uint32_t uFiltered;
+} AMessage;
+
 
 /* Data types for motor configuration and control */
 /*
