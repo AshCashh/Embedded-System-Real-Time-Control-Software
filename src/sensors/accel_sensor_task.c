@@ -180,7 +180,7 @@ BUG LOG:
 */
 static void prvAccelTask(void *pvParameters)
 {
-    UARTprintf("[*] Starting Acceleration Task\n");
+    // UARTprintf("[*] Starting Acceleration Task\n");
     if (!sensorBMI160Init())
     {
         UARTprintf("[!] BMI160 Initilisation Failed\n");
@@ -195,8 +195,8 @@ static void prvAccelTask(void *pvParameters)
     }
 
     uint8_t status = 0;
-    readI2C_acc(0x69, 0x1B, &status, 1);
-    UARTprintf("Status: 0x%02X\n", status);
+    // readI2C_acc(0x69, 0x1B, &status, 1);
+    // UARTprintf("Status: 0x%02X\n", status);
 
     uint8_t rawData[20];
     static uint32_t lastTick = 0;

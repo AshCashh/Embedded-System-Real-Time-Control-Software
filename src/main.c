@@ -133,7 +133,7 @@ int main(void)
     /* Create the event group */
     // xEventGroup = xEventGroupCreate();
     prvSetupHardware();
-    UARTprintf("[S]     Starting System\n");
+    // UARTprintf("[S]     Starting System\n");
     clearI2CBus();
     // if (xEventGroup == NULL)
     // {

@@ -93,9 +93,9 @@ bool sensorBMI160Init(void)
     vTaskDelay(pdMS_TO_TICKS(10));
 
     readI2C(BMI160_IC2_ADDRESS_VDDIO, REG_PMU_STATUS, &val); // PMU_STATUS
-    if ((val & 0x30) == 0x10)
+    if (!((val & 0x30) == 0x10))
     {
-        UARTprintf("[W] Accel in Normal Mode\n");
+        UARTprintf("[W] Accel not in Normal Mode\n");
     }
 
     uint8_t acc_range = 0b0011;
@@ -178,7 +178,7 @@ bool sensorBMI160Read(uint8_t *rawData)
  **************************************************************************************************/
 bool sensorBMI160Test(void)
 {
-    UARTprintf("FINDING CHIP ID:\n");
+    // UARTprintf("FINDING CHIP ID:\n");
     uint8_t val = 0;
     for (int i = 0; i < 10; i++)
     {
@@ -194,7 +194,7 @@ bool sensorBMI160Test(void)
         return false;
     }
 
-    UARTprintf("CHIP ID Correct: %d\n", val);
+    // UARTprintf("CHIP ID Correct: %d\n", val);
     return true;
 }
 

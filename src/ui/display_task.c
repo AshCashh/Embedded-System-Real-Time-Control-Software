@@ -1210,7 +1210,7 @@ void vCreateDisplayTask(void)
 
 static void prvDisplayTask(void *pvParameters)
 {
-    UARTprintf("Display task started\n");
+    // UARTprintf("Display task started\n");
     tRectangle sRect;
 
     struct AMessage xRxedStructure;

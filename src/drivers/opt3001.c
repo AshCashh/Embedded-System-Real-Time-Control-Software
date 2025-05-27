@@ -197,7 +197,7 @@ bool sensorOpt3001Test(void)
 {
 	uint16_t val;
 	
-	UARTprintf("FINDING MANUFACTURER ID:\n");
+	// UARTprintf("FINDING MANUFACTURER ID:\n");
 	// Check manufacturer ID
 	readI2C(OPT3001_I2C_ADDRESS, REG_MANUFACTURER_ID, (uint8_t *)&val);
 	
@@ -210,9 +210,9 @@ bool sensorOpt3001Test(void)
 	}
 
 	//print Man ID
-	UARTprintf("Manufacturer ID Correct: %c%c\n", (val >> 8) & 0x00FF, val & 0x00FF);
+	// UARTprintf("Manufacturer ID Correct: %c%c\n", (val >> 8) & 0x00FF, val & 0x00FF);
 
-	UARTprintf("FINDING DEVICE ID:\n");
+	// UARTprintf("FINDING DEVICE ID:\n");
 
 	// Check device ID
 	readI2C(OPT3001_I2C_ADDRESS, REG_DEVICE_ID, (uint8_t *)&val);
@@ -226,7 +226,7 @@ bool sensorOpt3001Test(void)
 	}
 
 	//print Device ID
-	UARTprintf("Device ID Correct: %02x%02x\n", (val >> 8) & 0x00FF, val & 0x00FF);
+	// UARTprintf("Device ID Correct: %02x%02x\n", (val >> 8) & 0x00FF, val & 0x00FF);
 
 	return (true);
 }

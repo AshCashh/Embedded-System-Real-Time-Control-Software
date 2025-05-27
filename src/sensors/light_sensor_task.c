@@ -201,7 +201,7 @@ static void prvLightSensorTask(void *pvParameters)
     float filteredLux = 0;
 
     // Test that sensor is set up correctly
-    UARTprintf("Testing OPT3001 Sensor:\n");
+    // UARTprintf("Testing OPT3001 Sensor:\n");
     success = sensorOpt3001Test();
 
     // stay here until sensor is working
