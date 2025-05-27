@@ -106,7 +106,7 @@ uint32_t g_ui32LightDataBuffer[LIGHT_DATA_BUFFER_SIZE] = {0};
 uint32_t g_ui32LightDataIndex = 0;
 volatile PlotType g_eCurrentPlot;
 
-#define ACCEL_DATA_BUFFER_SIZE 100
+#define ACCEL_DATA_BUFFER_SIZE 300
 uint32_t g_ui32AccelDataBuffer[ACCEL_DATA_BUFFER_SIZE] = {0};
 uint32_t g_ui32AccelDataIndex = 0;
 
@@ -169,7 +169,7 @@ void OnButtonPress(tWidget *psWidget);
 void OnSliderChange(tWidget *psWidget, int32_t i32Value);
 extern tCanvasWidget g_psPanels[];
 
-static void vSensorData(uint32_t *data, int dataSize, PlotType plotType);
+static void vSensorData(uint32_t *data, int dataSize, PlotType plotType, bool filtered);
 /*
  * The tasks as described in the comments at the top of this file.
  */
@@ -967,8 +967,8 @@ void OnCanvasPaint(tWidget *psWidget, tContext *psContext)
         GrContextForegroundSet(psContext, ClrBlack);
         GrRectFill(psContext, &sRect);
         GrContextForegroundSet(psContext, ClrWhite);
-        GrLineDraw(psContext, 10, 180, 310, 180); // X-axis
-        GrLineDraw(psContext, 10, 40, 10, 180);   // Y-axis
+        GrLineDraw(psContext, 10, 175, 310, 175); // X-axis
+        GrLineDraw(psContext, 10, 40, 10, 175);   // Y-axis
         // GrContextFontSet(psContext, g_psFontFixed6x8);
         // GrStringDraw(psContext, "Time", -1, 160, 192, false);
         // GrStringDraw(psContext, "Lux", -1, 4, 30, false);
@@ -979,8 +979,8 @@ void OnCanvasPaint(tWidget *psWidget, tContext *psContext)
         GrContextForegroundSet(psContext, ClrBlack); // Use black, not pink
         GrRectFill(psContext, &sRect);
         GrContextForegroundSet(psContext, ClrWhite); // Use white for axes
-        GrLineDraw(psContext, 10, 180, 310, 180); // X-axis
-        GrLineDraw(psContext, 10, 40, 10, 180);   // Y-axis
+        GrLineDraw(psContext, 10, 175, 310, 175); // X-axis
+        GrLineDraw(psContext, 10, 40, 10, 175);   // Y-axis
     }
 }
 
@@ -1172,6 +1172,29 @@ static void prvDisplayTask(void *pvParameters)
     //
     for (;;)
     {
+        // Check for event bits
+        EventBits_t uxBits = xEventGroupWaitBits(
+            xEventGroup,
+            EVENT_HIGH_THRESHOLD | EVENT_LOW_THRESHOLD | EVENT_BTN_TOGGLE,
+            pdTRUE,  // Clear bits after reading
+            pdFALSE, // Wait for any bit
+            0);      // Non-blocking
+
+        if (uxBits & EVENT_HIGH_THRESHOLD)
+        {
+            UARTprintf("Warning: High threshold exceeded!\n");
+        }
+
+        if (uxBits & EVENT_LOW_THRESHOLD)
+        {
+            //UARTprintf("Warning: Low threshold exceeded!\n");
+        }
+
+        if (uxBits & EVENT_BTN_TOGGLE)
+        {
+            plotRawData = !plotRawData;
+            UARTprintf("Toggled plot mode: %s\n", plotRawData ? "Raw Data" : "Filtered Data");
+        }
 
         // block until ISR gives semaphore
         if (xSemaphoreTake(xSemaphoreTimer0, portMAX_DELAY) == pdTRUE)
@@ -1201,7 +1224,7 @@ static void prvDisplayTask(void *pvParameters)
         {
             if (xQueueReceive(xLightQueue, &(xRxedStructure), (TickType_t)10) == pdPASS)
             {
-                g_ui32LightDataBuffer[g_ui32LightDataIndex] = xRxedStructure.uRaw;
+                g_ui32LightDataBuffer[g_ui32LightDataIndex] = plotRawData ? xRxedStructure.uRaw : xRxedStructure.uFiltered;
                 g_ui32LightDataIndex = (g_ui32LightDataIndex + 1) % LIGHT_DATA_BUFFER_SIZE;
                 if (g_ui32LightDataCount < LIGHT_DATA_BUFFER_SIZE)
                     g_ui32LightDataCount++;
@@ -1209,7 +1232,7 @@ static void prvDisplayTask(void *pvParameters)
                 //uint32_t prevIndex = (g_ui32LightDataIndex == 0) ? (LIGHT_DATA_BUFFER_SIZE - 1) : (g_ui32LightDataIndex - 1);
                 //UARTprintf("Light Data: %d, Count: %d\n", g_ui32LightDataBuffer[prevIndex], g_ui32LightDataCount); 
 
-                vSensorData(g_ui32LightDataBuffer, g_ui32LightDataCount, PLOT_LIGHT);
+                vSensorData(g_ui32LightDataBuffer, g_ui32LightDataCount, PLOT_LIGHT, plotRawData);
             }
             else{
                  //UARTprintf("No Light Data received\n");
@@ -1218,7 +1241,7 @@ static void prvDisplayTask(void *pvParameters)
         if (g_ui32Panel == 2 && g_eCurrentPlot == PLOT_ACCEL && g_bAccelPlotEnabled){
             if (xQueueReceive(xAccelQueue, &xRxedStructure, (TickType_t)10) == pdPASS)
             {
-                g_ui32AccelDataBuffer[g_ui32AccelDataIndex] = xRxedStructure.uRaw;
+                g_ui32AccelDataBuffer[g_ui32AccelDataIndex] = plotRawData ? xRxedStructure.uRaw : xRxedStructure.uFiltered;
                 g_ui32AccelDataIndex = (g_ui32AccelDataIndex + 1) % ACCEL_DATA_BUFFER_SIZE;
                 //UARTprintf("Accel Data: %d, Count: %d\n", g_ui32AccelDataBuffer[g_ui32AccelDataIndex], g_ui32AccelDataCount);
                 uint32_t prevIndex = (g_ui32AccelDataIndex == 0) ? (ACCEL_DATA_BUFFER_SIZE - 1) : (g_ui32AccelDataIndex - 1);
@@ -1226,7 +1249,7 @@ static void prvDisplayTask(void *pvParameters)
                
                 if (g_ui32AccelDataCount < ACCEL_DATA_BUFFER_SIZE)
                     g_ui32AccelDataCount++;
-                vSensorData(g_ui32AccelDataBuffer, g_ui32AccelDataCount, PLOT_ACCEL);
+                vSensorData(g_ui32AccelDataBuffer, g_ui32AccelDataCount, PLOT_ACCEL, plotRawData);
             }
             else{
                 //UARTprintf("Accel Data2: %d\n", g_ui32AccelDataBuffer[g_ui32AccelDataIndex]);
@@ -1234,7 +1257,7 @@ static void prvDisplayTask(void *pvParameters)
         }
     }
 }
-static void vSensorData(uint32_t *data, int dataSize, PlotType plotType)
+static void vSensorData(uint32_t *data, int dataSize, PlotType plotType, bool filtered)
 {
     // Plot area
     uint32_t xStart = 10;  // left edge of plot
@@ -1242,7 +1265,7 @@ static void vSensorData(uint32_t *data, int dataSize, PlotType plotType)
     uint32_t yTop = 40;    // top edge of plot
     uint32_t xStep = 3;    // Distance between points on the X-axis
     uint32_t plotWidth = 300;
-    uint32_t maxPoints = plotWidth / xStep;
+    
 
     // Axis scaling and labels
     uint32_t yMin = 0, yMax = 100, yScale = 1;
@@ -1256,12 +1279,14 @@ static void vSensorData(uint32_t *data, int dataSize, PlotType plotType)
         yMax = 500;
         yScale = 1; // 1 unit per lux
         yLabel = "Lux";
+        xStep = 3; // 3 pixels per time unit
         break;
     case PLOT_ACCEL:
         yMin = 0;
-        yMax = 2000; // not sure what the max accel value is, so using 500 as a placeholder
+        yMax = 100; // not sure what the max accel value is, so using 500 as a placeholder
         yScale = 1; 
         yLabel = "g";
+        xStep = 1;
         break;
     case PLOT_RPM:
         yMin = 0;
@@ -1278,6 +1303,7 @@ static void vSensorData(uint32_t *data, int dataSize, PlotType plotType)
     default:
         break;
     }
+    uint32_t maxPoints = plotWidth / xStep;
 
     if (dataSize >= maxPoints)
     {
@@ -1334,7 +1360,8 @@ static void vSensorData(uint32_t *data, int dataSize, PlotType plotType)
         if (y2 > yStart)
             y2 = yStart;
 
-        GrContextForegroundSet(&sContext, ClrRed);
+        if (filtered) GrContextForegroundSet(&sContext, ClrRed);
+        else GrContextForegroundSet(&sContext, ClrBlue);
         GrLineDraw(&sContext, x1, y1, x2, y2);
     }
     // Add labels for the axes

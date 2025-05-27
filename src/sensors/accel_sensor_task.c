@@ -283,7 +283,7 @@ static void prvAccelTask(void *pvParameters)
             }
             // add to queue (both raw and filtered values)
             xMessage.ulTimeStamp = xTaskGetTickCount();
-            xMessage.uFiltered = avgAbsAccel;
+            xMessage.uFiltered = (uint32_t)(avgAbsAccel * 100);
             xMessage.uRaw = (uint32_t)(avgAbsAccel_raw * 100);
             if (xQueueSend(xAccelQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
             {
