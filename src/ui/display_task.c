@@ -168,7 +168,7 @@ void OnCheckChange(tWidget *psWidget, uint32_t bSelected);
 void OnButtonPress(tWidget *psWidget);
 void OnSliderChange(tWidget *psWidget, int32_t i32Value);
 extern tCanvasWidget g_psPanels[];
-
+static uint32_t accel_threshold = 10;
 static void vSensorData(uint32_t *data, int dataSize, PlotType plotType, bool filtered);
 /*
  * The tasks as described in the comments at the top of this file.
@@ -321,28 +321,34 @@ tSliderWidget g_psSliders[] =
 tSliderWidget g_psLimitSliders[] = {
     // Current Lower Limit
     SliderStruct(g_psPanels + 1, &g_psLimitSliders[1], 0, &g_sKentec320x240x16_SSD2119,
-                 20, 45, 280, 30, 0, 100, 10, // x, y, width, height
+                 20, 40, 280, 25, 0, 100, 10, // x, y, width, height
                  (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
                  ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
                  &g_sFontCm20, "10 A", 0, 0, OnLimitSliderChange),
     // Current Upper Limit
     SliderStruct(g_psPanels + 1, &g_psLimitSliders[2], 0, &g_sKentec320x240x16_SSD2119,
-                 20, 75, 280, 30, 0, 100, 50,
+                 20, 66, 280, 25, 0, 100, 50,
                  (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
                  ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
                  &g_sFontCm20, "50 A", 0, 0, OnLimitSliderChange),
     // Acceleration Lower Limit
     SliderStruct(g_psPanels + 1, &g_psLimitSliders[3], 0, &g_sKentec320x240x16_SSD2119,
-                 20, 130, 280, 30, 0, 20, 5,
+                 20, 110, 280, 25, 0, 20, 5,
                  (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
                  ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
                  &g_sFontCm20, "5 Rpm/s", 0, 0, OnLimitSliderChange),
     // Acceleration Upper Limit
-    SliderStruct(g_psPanels + 1, 0, 0, &g_sKentec320x240x16_SSD2119,
-                 20, 160, 280, 30, 0, 20, 15,
+    SliderStruct(g_psPanels + 1, &g_psLimitSliders[4], 0, &g_sKentec320x240x16_SSD2119,
+                 20, 136, 280, 25, 0, 20, 15,
                  (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
                  ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
                  &g_sFontCm20, "15 Rpm/s", 0, 0, OnLimitSliderChange),
+    // Acceleration Threshold 
+    SliderStruct(g_psPanels + 1, 0, 0, &g_sKentec320x240x16_SSD2119,
+                 20, 165, 280, 25, 0, 20, 10, // y=170, adjust as needed
+                 (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
+                 ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
+                 &g_sFontCm20, "Accel Threshold", 0, 0, OnLimitSliderChange),
 };
 
 tCanvasWidget g_sLimitSlidersCanvas = CanvasStruct(
@@ -389,6 +395,12 @@ void OnLimitSliderChange(tWidget *psWidget, int32_t i32Value)
         Motor.acceleration_limit.upper = i32Value;
         usprintf(pcText, "Max: %d Rpm/s", i32Value);
         SliderTextSet(&g_psLimitSliders[3], pcText);
+    }
+    else if (psWidget == (tWidget *)&g_psLimitSliders[4])
+    {
+        accel_threshold = i32Value;
+        usprintf(pcText, "Threshold: %d", i32Value);
+        SliderTextSet(&g_psLimitSliders[4], pcText);
     }
     WidgetPaint(psWidget);
 }
@@ -947,7 +959,7 @@ void OnMotorPanelPaint(tWidget *psWidget, tContext *psContext)
     // sRect.i16YMax = 190;
     // GrContextForegroundSet(psContext, ClrGray);
     // GrRectDraw(psContext, &sRect);
-    GrStringDraw(psContext, "Acceleration Upper/Lower", -1, 10, 110, false);
+    GrStringDraw(psContext, "Acceleration Upper/Lower", -1, 10, 95, false);
     // GrStringDraw(psContext, "Current Upper", -1, 10, 70, false);
     // GrStringDraw(psContext, "Accel Lower", -1, 10, 110, false);
     // GrStringDraw(psContext, "Accel Upper", -1, 10, 150, false);
@@ -1245,7 +1257,7 @@ static void prvDisplayTask(void *pvParameters)
                 g_ui32AccelDataIndex = (g_ui32AccelDataIndex + 1) % ACCEL_DATA_BUFFER_SIZE;
                 //UARTprintf("Accel Data: %d, Count: %d\n", g_ui32AccelDataBuffer[g_ui32AccelDataIndex], g_ui32AccelDataCount);
                 uint32_t prevIndex = (g_ui32AccelDataIndex == 0) ? (ACCEL_DATA_BUFFER_SIZE - 1) : (g_ui32AccelDataIndex - 1);
-                // UARTprintf("Accel Data: %d, Count: %d\n", g_ui32AccelDataBuffer[prevIndex], g_ui32AccelDataCount);
+                //UARTprintf("%d\n", plotRawData ? xRxedStructure.uRaw : xRxedStructure.uFiltered);
                
                 if (g_ui32AccelDataCount < ACCEL_DATA_BUFFER_SIZE)
                     g_ui32AccelDataCount++;
