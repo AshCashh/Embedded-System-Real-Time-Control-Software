@@ -165,7 +165,7 @@ void vCreateAccelTask(void)
 
     xTaskCreate(prvAccelTask,
                 "Accel Task",
-                512, // Increased stack size for BMI160 operations
+                1024, // Increased stack size for BMI160 operations
                 NULL,
                 tskIDLE_PRIORITY + 1,
                 NULL);
@@ -223,6 +223,7 @@ static void prvAccelTask(void *pvParameters)
                         UARTprintf("BMI160 error status: 0x%02X\n", err);
                     }
                 }
+                continue;
             }
             else
             {

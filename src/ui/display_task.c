@@ -1460,7 +1460,6 @@ void xTimerHandler(void)
         count = 0;
     }
     count++;
-
     xSemaphoreGiveFromISR(xSemaphoreTimer0, &xHigherPriorityTaskWoken);
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }

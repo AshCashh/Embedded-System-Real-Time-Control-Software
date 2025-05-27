@@ -188,9 +188,10 @@ int main(void)
     {
         taskENTER_CRITICAL();
         /* Configure application specific hardware and initialize the task thread. */
-        vCreateAccelTask();
         vCreateDisplayTask();
+        SysCtlDelay(10000);
         vCreateLightSensorTask();
+        vCreateAccelTask();
         /* Start the tasks and timer running. */
         taskEXIT_CRITICAL();
         vTaskStartScheduler();
@@ -330,6 +331,7 @@ static void prvConfigureI2C(void)
 
     I2CMasterInitExpClk(I2C2_BASE, SysCtlClockGet(), false);
     I2CMasterIntEnable(I2C2_BASE);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_I2C2));
     IntEnable(INT_I2C2);
 }
 

@@ -33,10 +33,18 @@ extern uint32_t g_ui32SysClock;
  */
 bool writeI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
 {
-    // while (I2CMasterBusBusy(I2C2_BASE))
-    // {
-    //     // Wait for the bus to be free
-    // }
+
+    // Add this before taking the mutex or setting up the transfer
+    int timeout = 10000;
+    while (I2CMasterBusBusy(I2C2_BASE) && --timeout > 0)
+    {
+        SysCtlDelay(10);
+    }
+    if (timeout == 0)
+    {
+        UARTprintf("[!] I2C Bus stuck before read\n");
+        recoverI2CBusIfStuck();
+    }
     xSemaphoreTake(xI2CMutex, portMAX_DELAY);
     // Load device slave address
     I2CMasterSlaveAddrSet(I2C2_BASE, ui8Addr, false);
@@ -87,10 +95,17 @@ bool writeI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint8_t len)
 {
     if (len == 0)
         return false;
-    // while (I2CMasterBusBusy(I2C2_BASE))
-    // {
-    //     // Wait for the bus to be free
-    // }
+    // Add this before taking the mutex or setting up the transfer
+    int timeout = 10000;
+    while (I2CMasterBusBusy(I2C2_BASE) && --timeout > 0)
+    {
+        SysCtlDelay(10);
+    }
+    if (timeout == 0)
+    {
+        UARTprintf("[!] I2C Bus stuck before read\n");
+        recoverI2CBusIfStuck();
+    }
     xSemaphoreTake(xI2CMutex, portMAX_DELAY);
     I2CMasterSlaveAddrSet(I2C2_BASE, ui8Addr, false); // Write
     I2CMasterDataPut(I2C2_BASE, ui8Reg);
@@ -138,10 +153,17 @@ bool writeI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint8_t len)
  */
 bool readI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
 {
-    // while (I2CMasterBusBusy(I2C2_BASE))
-    // {
-    //     // Wait for the bus to be free
-    // }
+    // Add this before taking the mutex or setting up the transfer
+    int timeout = 10000;
+    while (I2CMasterBusBusy(I2C2_BASE) && --timeout > 0)
+    {
+        SysCtlDelay(10);
+    }
+    if (timeout == 0)
+    {
+        UARTprintf("[!] I2C Bus stuck before read\n");
+        recoverI2CBusIfStuck();
+    }
     xSemaphoreTake(xI2CMutex, portMAX_DELAY);
     // Load device slave address and change I2C to write
     I2CMasterSlaveAddrSet(I2C2_BASE, ui8Addr, false);
@@ -191,10 +213,17 @@ bool readI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint16_t len)
 {
     if (len < 1)
         return false;
-    // while (I2CMasterBusBusy(I2C2_BASE))
-    // {
-    //     // Wait for the bus to be free
-    // }
+    // Add this before taking the mutex or setting up the transfer
+    int timeout = 10000;
+    while (I2CMasterBusBusy(I2C2_BASE) && --timeout > 0)
+    {
+        SysCtlDelay(10);
+    }
+    if (timeout == 0)
+    {
+        UARTprintf("[!] I2C Bus stuck before read\n");
+        recoverI2CBusIfStuck();
+    }
 
     xSemaphoreTake(xI2CMutex, portMAX_DELAY);
     // Write register address (no stop)
@@ -329,9 +358,9 @@ void unstickI2CBus(void)
     // Clock SCL 9 times
     for (int i = 0; i < 9; i++)
     {
-        GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_5, 0);             // SCL low
+        GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_5, 0); // SCL low
         SysCtlDelay(1000);
-        GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_5, GPIO_PIN_5);    // SCL high
+        GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_5, GPIO_PIN_5); // SCL high
         SysCtlDelay(1000);
     }
 

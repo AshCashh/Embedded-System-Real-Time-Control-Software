@@ -70,6 +70,7 @@
 #define configTIMER_TASK_PRIORITY 10
 #define configTIMER_QUEUE_LENGTH 10
 #define configTIMER_TASK_STACK_DEPTH configMINIMAL_STACK_SIZE
+#define configUSE_TASK_FPU_SUPPORT 2
 
 //#define configMAX_PRIORITIES                ( ( unsigned portBASE_TYPE ) 16 )
 #define configMAX_PRIORITIES                ( 16 )

@@ -25,7 +25,11 @@
 #include <stdint.h>
 #include "inc/hw_nvic.h"
 #include "inc/hw_types.h"
+#include <stdbool.h>
 #include "includes/display_task.h"
+#include "driverlib/uart.h"
+#include "utils/uartstdio.h"
+
 
 //*****************************************************************************
 //
@@ -36,6 +40,8 @@ void ResetISR(void);
 static void NmiSR(void);
 static void FaultISR(void);
 static void IntDefaultHandler(void);
+static void BusISR(void);
+static void UsageFaultISR(void);
 
 //*****************************************************************************
 //
@@ -50,6 +56,28 @@ extern void xI2CHandler(void);
 extern void xBMI160DataReadyHandler(void);
 extern void xOptIntHandler(void);
 extern void TouchScreenIntHandler(void);
+
+typedef struct
+{
+  volatile uint32_t CPUID;     // Offset: 0x000
+  volatile uint32_t ICSR;      // Offset: 0x004
+  volatile uint32_t VTOR;      // Offset: 0x008
+  volatile uint32_t AIRCR;     // Offset: 0x00C
+  volatile uint32_t SCR;       // Offset: 0x010
+  volatile uint32_t CCR;       // Offset: 0x014
+  volatile uint8_t  SHP[12];   // Offset: 0x018
+  volatile uint32_t SHCSR;     // Offset: 0x024
+  volatile uint32_t CFSR;      // Offset: 0x028
+  volatile uint32_t HFSR;      // Offset: 0x02C
+  volatile uint32_t DFSR;      // Offset: 0x030
+  volatile uint32_t MMFAR;     // Offset: 0x034
+  volatile uint32_t BFAR;      // Offset: 0x038
+  volatile uint32_t AFSR;      // Offset: 0x03C
+} SCB_Type;
+
+// And manually declare the SCB struct pointer (if needed)
+#define SCB_BASE        (0xE000ED00UL)
+#define SCB             ((SCB_Type *)     SCB_BASE)
 
 //*****************************************************************************
 //
@@ -80,8 +108,8 @@ void (* const g_pfnVectors[])(void) =
     NmiSR,                                  // The NMI handler
     FaultISR,                               // The hard fault handler
     IntDefaultHandler,                      // The MPU fault handler
-    IntDefaultHandler,                      // The bus fault handler
-    IntDefaultHandler,                      // The usage fault handler
+    BusISR,                      // The bus fault handler
+    UsageFaultISR,                      // The usage fault handler
     0,                                      // Reserved
     0,                                      // Reserved
     0,                                      // Reserved
@@ -306,6 +334,11 @@ FaultISR(void)
     //
     // Enter an infinite loop.
     //
+    UARTprintf("Fault Interrupt Triggered\n");
+    UARTprintf("SCB->CFSR = 0x%08X\n", SCB->CFSR);
+    UARTprintf("SCB->HFSR = 0x%08X\n", SCB->HFSR);
+    UARTprintf("SCB->MMFAR = 0x%08X\n", SCB->MMFAR);
+    UARTprintf("SCB->BFAR = 0x%08X\n", SCB->BFAR);
     while(1)
     {
     }
@@ -327,4 +360,17 @@ IntDefaultHandler(void)
     while(1)
     {
     }
+}
+
+static void BusISR(void) {
+    UARTprintf("BUS FAULT TRIGGERED\n");
+    while(1)
+    {
+    }
+}
+
+static void UsageFaultISR(void) {
+    UARTprintf("Usage Fault Triggered\n");
+    UARTprintf("SCB->CFSR = 0x%08X\n", SCB->CFSR);
+    while (1);
 }
