@@ -73,7 +73,6 @@
 
 #include "includes/accel_sensor_task.h"
 #include "includes/light_sensor_task.h"
-#include "includes/display_task.h"
 #include "includes/common.h"
 
 #include "grlib.h"
@@ -103,6 +102,8 @@ SemaphoreHandle_t xSampleAccelSemaphore = NULL;
 SemaphoreHandle_t xEmergencyStop = NULL;
 
 SemaphoreHandle_t xI2CMutex = NULL;
+SemaphoreHandle_t xEmergencyMutex = NULL;
+
 extern SemaphoreHandle_t xSemaphoreTimer0;
 
 extern tDisplay sContext;
@@ -181,8 +182,9 @@ int main(void)
     xSemaphoreTimer0 = xSemaphoreCreateBinary();
     xEmergencyStop = xSemaphoreCreateBinary();
     xI2CMutex = xSemaphoreCreateMutex();
+    xEmergencyMutex = xSemaphoreCreateMutex();
 
-    if (xButton1Semaphore != NULL && xButton2Semaphore != NULL && xIC2MasterSemaphore != NULL && xSampleLightSemaphore != NULL && xI2CMutex != NULL && xEmergencyStop != NULL)
+    if (xButton1Semaphore != NULL && xButton2Semaphore != NULL && xIC2MasterSemaphore != NULL && xSampleLightSemaphore != NULL && xI2CMutex != NULL && xEmergencyStop != NULL && xEmergencyMutex != NULL)
     {
         taskENTER_CRITICAL();
         /* Configure application specific hardware and initialize the task thread. */

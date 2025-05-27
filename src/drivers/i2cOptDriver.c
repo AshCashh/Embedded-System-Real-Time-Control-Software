@@ -37,7 +37,7 @@ bool writeI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
     // {
     //     // Wait for the bus to be free
     // }
-    xSemaphoreTake(xI2CMutex, pdMS_TO_TICKS(100));
+    xSemaphoreTake(xI2CMutex, portMAX_DELAY);
     // Load device slave address
     I2CMasterSlaveAddrSet(I2C2_BASE, ui8Addr, false);
 
@@ -91,7 +91,7 @@ bool writeI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint8_t len)
     // {
     //     // Wait for the bus to be free
     // }
-    xSemaphoreTake(xI2CMutex, pdMS_TO_TICKS(100));
+    xSemaphoreTake(xI2CMutex, portMAX_DELAY);
     I2CMasterSlaveAddrSet(I2C2_BASE, ui8Addr, false); // Write
     I2CMasterDataPut(I2C2_BASE, ui8Reg);
     I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_START);
@@ -142,7 +142,7 @@ bool readI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
     // {
     //     // Wait for the bus to be free
     // }
-    xSemaphoreTake(xI2CMutex, pdMS_TO_TICKS(100));
+    xSemaphoreTake(xI2CMutex, portMAX_DELAY);
     // Load device slave address and change I2C to write
     I2CMasterSlaveAddrSet(I2C2_BASE, ui8Addr, false);
 
@@ -196,7 +196,7 @@ bool readI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint16_t len)
     //     // Wait for the bus to be free
     // }
 
-    xSemaphoreTake(xI2CMutex, pdMS_TO_TICKS(100));
+    xSemaphoreTake(xI2CMutex, portMAX_DELAY);
     // Write register address (no stop)
     I2CMasterSlaveAddrSet(I2C2_BASE, ui8Addr, false); // Write
     I2CMasterDataPut(I2C2_BASE, ui8Reg);
@@ -295,7 +295,7 @@ void recoverI2CBusIfStuck(void)
 bool i2cGeneralCallReset(void)
 {
     uint8_t reset_cmd = 0x06; // General Call Software Reset
-    xSemaphoreTake(xI2CMutex, pdMS_TO_TICKS(100));
+    xSemaphoreTake(xI2CMutex, portMAX_DELAY);
 
     I2CMasterSlaveAddrSet(I2C2_BASE, 0x00, false); // General Call
     I2CMasterDataPut(I2C2_BASE, reset_cmd);

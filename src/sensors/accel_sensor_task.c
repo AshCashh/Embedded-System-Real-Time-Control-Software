@@ -125,8 +125,10 @@
 extern SemaphoreHandle_t xIC2MasterSemaphore;
 extern SemaphoreHandle_t xSampleAccelSemaphore;
 extern SemaphoreHandle_t xEmergencyStop;
+extern SemaphoreHandle_t xEmergencyMutex;
 
 extern uint32_t g_ui32SysClock;
+extern uint32_t accel_threshold;
 
 tContext sContext;
 // Moving average filter variables
@@ -278,13 +280,18 @@ static void prvAccelTask(void *pvParameters)
             float avgAbsAccel = (fabs(filteredX) + fabs(filteredY) + fabs(filteredZ)) / 3.0f;
             float avgAbsAccel_raw = (fabs(accelX) + fabs(accelY) + fabs(accelZ)) / 3.0f;
 
-            if (avgAbsAccel >= CRASH_LIMIT) {
-                xSemaphoreGive(xEmergencyStop);
-            }
+
             // add to queue (both raw and filtered values)
             xMessage.ulTimeStamp = xTaskGetTickCount();
             xMessage.uFiltered = (uint32_t)(avgAbsAccel * 100);
             xMessage.uRaw = (uint32_t)(avgAbsAccel_raw * 100);
+
+            xSemaphoreTake(xEmergencyMutex, pdMS_TO_TICKS(100));
+            if (xMessage.uFiltered >= accel_threshold) {
+                xSemaphoreGive(xEmergencyStop);
+                //UARTprintf("STOP TRIGGERED: %d\n", accel_threshold);
+            }
+            xSemaphoreGive(xEmergencyMutex);
             if (xQueueSend(xAccelQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
             {
                 // UARTprintf("Accel sent: %d\n", xMessage.uRaw);

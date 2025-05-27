@@ -80,10 +80,12 @@
 #include "includes/light_sensor_task.h"
 #include "includes/accel_sensor_task.h"
 #include "includes/shared_variables.h"
+#include "includes/display_task.h"
 /*-----------------------------------------------------------*/
 #include <stdbool.h>
 #define RPM_MIN 0
 #define RPM_MAX 2500
+extern uint32_t accel_threshold;
 //*****************************************************************************
 //
 // The error routine that is called if the driver library encounters an error.
@@ -111,6 +113,7 @@ uint32_t g_ui32AccelDataBuffer[ACCEL_DATA_BUFFER_SIZE] = {0};
 uint32_t g_ui32AccelDataIndex = 0;
 
 
+
 uint32_t g_ui32LightDataCount = 0; 
 uint32_t g_ui32AccelDataCount = 0;
 
@@ -126,11 +129,13 @@ tContext sContext;
 Motor_t Motor;
 uint32_t luxValue = 10;
 
+
 // timer
 #define MAX_TIME_LENGTH 9
 #define MAX_DATE_LENGTH 6
 
 SemaphoreHandle_t xSemaphoreTimer0 = NULL;
+extern SemaphoreHandle_t xEmergencyMutex;
 volatile uint8_t timer_hours;
 volatile uint8_t timer_minutes;
 volatile uint8_t timer_seconds;
@@ -168,7 +173,7 @@ void OnCheckChange(tWidget *psWidget, uint32_t bSelected);
 void OnButtonPress(tWidget *psWidget);
 void OnSliderChange(tWidget *psWidget, int32_t i32Value);
 extern tCanvasWidget g_psPanels[];
-static uint32_t accel_threshold = 10;
+
 static void vSensorData(uint32_t *data, int dataSize, PlotType plotType, bool filtered);
 /*
  * The tasks as described in the comments at the top of this file.
@@ -345,7 +350,7 @@ tSliderWidget g_psLimitSliders[] = {
                  &g_sFontCm20, "15 Rpm/s", 0, 0, OnLimitSliderChange),
     // Acceleration Threshold 
     SliderStruct(g_psPanels + 1, 0, 0, &g_sKentec320x240x16_SSD2119,
-                 20, 165, 280, 25, 0, 20, 10, // y=170, adjust as needed
+                 20, 165, 280, 25, 0, 100, 10, // y=170, adjust as needed
                  (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
                  ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
                  &g_sFontCm20, "Accel Threshold", 0, 0, OnLimitSliderChange),
@@ -397,8 +402,10 @@ void OnLimitSliderChange(tWidget *psWidget, int32_t i32Value)
         SliderTextSet(&g_psLimitSliders[3], pcText);
     }
     else if (psWidget == (tWidget *)&g_psLimitSliders[4])
-    {
+    {   
+        xSemaphoreTake(xEmergencyMutex, pdMS_TO_TICKS(100));
         accel_threshold = i32Value;
+        xSemaphoreGive(xEmergencyMutex);
         usprintf(pcText, "Threshold: %d", i32Value);
         SliderTextSet(&g_psLimitSliders[4], pcText);
     }
