@@ -124,7 +124,19 @@ extern SemaphoreHandle_t xSampleLightSemaphore;
 
 extern uint32_t g_ui32SysClock;
 
-tContext sContext;
+
+/* Event bits */
+#define EVENT_HIGH_THRESHOLD (1 << 0)
+#define EVENT_LOW_THRESHOLD (1 << 1)
+#define EVENT_BTN_TOGGLE (1 << 2)
+#define LOW_THRESHOLD 5
+EventGroupHandle_t xEventGroup;
+/*
+ * Global variable to log the last GPIO button pressed.
+ */
+volatile static uint32_t g_pui32ButtonPressed = NULL;
+extern SemaphoreHandle_t xButton1Semaphore;
+bool button = false;
 
 /*
  * The tasks as described in the comments at the top of this file.
@@ -143,7 +155,13 @@ void vCreateLightSensorTask(void)
 {
     /* Configure the button to generate interrupts. */
     prvConfigureButton();
-
+    // Set event bits based on thresholds
+    xEventGroup = xEventGroupCreate();
+    if (xEventGroup == NULL)
+    {
+        UARTprintf("Failed to create Event Group\n");
+        return;
+    }
     xTaskCreate(prvLightSensorTask,
                 "Light Sensor Sensing",
                 512,
@@ -206,15 +224,15 @@ static void prvLightSensorTask(void *pvParameters)
                 sensorOpt3001Convert(rawData, &convertedLux);
                 filteredLux = MovingAverageFilter(filterBuffer, &filterIndex, &filterSum, FILTER_SIZE, convertedLux);
 
-                // Set event bits based on thresholds
-                // if (convertedLux > HIGH_THRESHOLD)
-                // {
-                //     xEventGroupSetBits(xEventGroup, EVENT_HIGH_THRESHOLD);
-                // }
-                // else if (convertedLux < LOW_THRESHOLD)
-                // {
-                //     xEventGroupSetBits(xEventGroup, EVENT_LOW_THRESHOLD);
-                // }
+                //Set event bits based on thresholds
+                if (convertedLux > HIGH_THRESHOLD)
+                {
+                    xEventGroupSetBits(xEventGroup, EVENT_HIGH_THRESHOLD);
+                }
+                else if (convertedLux < LOW_THRESHOLD)
+                {
+                    xEventGroupSetBits(xEventGroup, EVENT_LOW_THRESHOLD);
+                }
                 // add to queue (both raw and filtered values)
                 xMessage.ulTimeStamp = xTaskGetTickCount();
                 xMessage.uFiltered = filteredLux;
