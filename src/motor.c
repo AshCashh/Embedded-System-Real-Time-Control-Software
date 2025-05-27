@@ -270,7 +270,7 @@ static void prvCurrentReadTask(void *pvParameters)
                 filtered_current4 = AMPS_TO_MILLIAMPS((current4_avg /= ADC_CURRENT_SAMPLES));
                 filtered_currentE = AMPS_TO_MILLIAMPS((currentE_avg /= ADC_CURRENT_SAMPLES));
                 // print to uart
-                UARTprintf("%d,%d,%d\n", (int)filtered_current0, (int)filtered_current4, (int)filtered_currentE);
+                // UARTprintf("%d,%d,%d\n", (int)filtered_current0, (int)filtered_current4, (int)filtered_currentE);
                 // Reset the counter and averages
                 counter = 0;
                 current0_avg = 0;
@@ -499,11 +499,11 @@ static void prvMotorPIDTask(void *parameters)
         if (need_disable)
             disableMotor();
 
-        // UARTprintf("RPM: %d, Target: %d, AvgAccel: %d, Ramped Target RPM: %d\n",
-        //            (int)rpm,
-        //            (int)local_target_rpm,
-        //            (int)avg_acceleration,
-        //            (int)ramped_target_rpm);
+        UARTprintf("RPM: %d, Target: %d, AvgAccel: %d, Ramped Target RPM: %d\n",
+                   (int)rpm,
+                   (int)local_target_rpm,
+                   (int)avg_acceleration,
+                   (int)ramped_target_rpm);
     }
 }
 
