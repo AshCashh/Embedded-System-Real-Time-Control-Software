@@ -113,7 +113,7 @@ uint32_t g_ui32AccelDataBuffer[ACCEL_DATA_BUFFER_SIZE] = {0};
 uint32_t g_ui32AccelDataIndex = 0;
 
 
-
+extern bool day;
 uint32_t g_ui32LightDataCount = 0; 
 uint32_t g_ui32AccelDataCount = 0;
 
@@ -951,7 +951,7 @@ void OnIntroPaint(tWidget *psWidget, tContext *psContext)
     dayNightRect.i16XMax = 319 - 8; // 8px padding from right
     dayNightRect.i16YMax = 8 + 24;  // 24px tall
     luxValue = 3;
-    if (luxValue < 5)
+    if (!day)
     {
         // Night: blue box, white text "Night"
         GrContextForegroundSet(psContext, ClrBlack);
