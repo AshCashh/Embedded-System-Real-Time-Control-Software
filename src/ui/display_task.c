@@ -449,17 +449,26 @@ tPushButtonWidget g_psPushButtons[] =
                              ClrMidnightBlue, ClrBlack, ClrGray, ClrSilver,
                              &g_sFontCm22, "3", 0, 0, 0, 0, OnButtonPress),
 };
-tPushButtonWidget g_sStopButton = RectangularButtonStruct(
+tPushButtonWidget g_sEStopButton = RectangularButtonStruct(
     g_psPanels, 0, 0, &g_sKentec320x240x16_SSD2119,
-    190, 120 - 20, 80, 40,                            // x, y, width, height
-    PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT, // style: fill, outline, text
-    ClrRed, ClrGray, ClrWhite, ClrWhite,              // colors: fill, press fill, outline, text
+    210, 100, 80, 40, // x, y, width, height (adjust as needed)
+    PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT,
+    ClrGray, ClrGray, ClrWhite, ClrWhite,
+    &g_sFontCm20, "E-STOP", 0, 0, 0, 0,
+    OnButtonPress);
+
+// Update Stop button position to make space for E-STOP
+tPushButtonWidget g_sStopButton = RectangularButtonStruct(
+    g_psPanels, &g_sEStopButton, 0, &g_sKentec320x240x16_SSD2119,
+    120, 100, 80, 40,
+    PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT,
+    ClrRed, ClrGray, ClrWhite, ClrWhite,
     &g_sFontCm20, "Stop", 0, 0, 0, 0,
     OnButtonPress);
 
 tPushButtonWidget g_sStartButton = RectangularButtonStruct(
     g_psPanels, &g_sStopButton, 0, &g_sKentec320x240x16_SSD2119,
-    50, 120 - 20, 80, 40,
+    30, 120 - 20, 80, 40,
     PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT,
     ClrGreen, ClrGray, ClrWhite, ClrWhite,
     &g_sFontCm20, "Start", 0, 0, 0, 0,
@@ -854,35 +863,34 @@ void OnIntroPaint(tWidget *psWidget, tContext *psContext)
     sRect.i16YMax = 30 - 15;
     // Dynamically update STOP button label and color
 
-    WidgetPaint((tWidget *)&g_sStopButton);
+     // Dynamically update STOP and START button label and color
     switch (Motor.MotorState)
     {
     case IDLE:
         PushButtonTextSet(&g_sStopButton, "Stop");
-        PushButtonFillColorSet(&g_sStopButton, ClrGray);
+        PushButtonFillColorSet(&g_sStopButton, ClrGray);      // Stop button greyed
+        PushButtonFillColorSet(&g_sStartButton, ClrGreen);    // Start button active
         GrContextForegroundSet(psContext, ClrGray);
         pcState = "IDLE";
         break;
     case RUNNING:
-        PushButtonFillColorSet(&g_sStartButton, ClrGreen);
+        PushButtonFillColorSet(&g_sStartButton, ClrGray);     // Start button greyed
         PushButtonTextSet(&g_sStopButton, "Stop");
-        PushButtonFillColorSet(&g_sStopButton, ClrRed);
+        PushButtonFillColorSet(&g_sStopButton, ClrRed);       // Stop button active
         GrContextForegroundSet(psContext, ClrBlue);
         pcState = "RUNNING";
         break;
     case STOP:
         GrContextForegroundSet(psContext, ClrRed);
-
         PushButtonTextSet(&g_sStopButton, "Stop");
-        PushButtonFillColorSet(&g_sStopButton, ClrRed);
-        PushButtonFillColorSet(&g_sStartButton, ClrGreen);
-        pcState = "STOP";
+        PushButtonFillColorSet(&g_sStopButton, ClrGray);      // Stop button greyed
+        PushButtonFillColorSet(&g_sStartButton, ClrGreen);    // Start button active
+        pcState = "STOPPED";
         break;
     case ESTOP:
         PushButtonFillColorSet(&g_sStartButton, ClrGreen);
         PushButtonTextSet(&g_sStopButton, "ACK");
         PushButtonFillColorSet(&g_sStopButton, ClrOrange);
-
         GrContextForegroundSet(psContext, ClrOrange);
         pcState = "E-STOP";
         break;
@@ -893,6 +901,27 @@ void OnIntroPaint(tWidget *psWidget, tContext *psContext)
     GrCircleFill(psContext, 240, 40 - 15, 8);
     GrContextForegroundSet(psContext, ClrWhite);
     GrCircleDraw(psContext, 240, 40 - 15, 8);
+
+    // Draw/paint the E-STOP button
+    WidgetPaint((tWidget *)&g_sStopButton);
+    WidgetPaint((tWidget *)&g_sStartButton);
+    WidgetPaint((tWidget *)&g_sEStopButton);
+    // E-STOP button state logic
+    if (Motor.MotorState == ESTOP)
+    {
+        PushButtonTextSet(&g_sEStopButton, "ACK");
+        PushButtonFillColorSet(&g_sEStopButton, ClrOrange);
+        PushButtonFillOn(&g_sEStopButton);
+        PushButtonTextOn(&g_sEStopButton);
+    }
+    else
+    {
+        PushButtonTextSet(&g_sEStopButton, "E-STOP");
+        PushButtonFillColorSet(&g_sEStopButton, ClrGray);
+        PushButtonFillOn(&g_sEStopButton);
+        PushButtonTextOn(&g_sEStopButton);
+    }
+    WidgetPaint((tWidget *)&g_sEStopButton);
 
     // Draw the "MOTOR STATUS:" label
     GrContextFontSet(psContext, &g_sFontCm18);
@@ -1052,18 +1081,39 @@ void OnButtonPress(tWidget *psWidget)
         return;
     }
 
-    // Stop button: dual function
+    // Stop button: only stops the motor if running
     if (psWidget == (tWidget *)&g_sStopButton)
     {
         if (Motor.MotorState == RUNNING)
         {
-            // Enter ESTOP state
-            Motor.MotorState = ESTOP;
-        }
-        else if (Motor.MotorState == ESTOP)
-        {
-            // Acknowledge ESTOP, go to STOP
             Motor.MotorState = STOP;
+            WidgetPaint((tWidget *)&g_sDashboard);
+        }
+        return;
+    }
+    // E-STOP/ACK button logic
+    if (psWidget == (tWidget *)&g_sEStopButton)
+    {
+        if (Motor.MotorState != ESTOP)
+        {
+            // Trigger E-STOP
+            Motor.MotorState = ESTOP;
+            // Change button to ACK (orange, enabled)
+            PushButtonTextSet(&g_sEStopButton, "ACK");
+            PushButtonFillColorSet(&g_sEStopButton, ClrOrange);
+            PushButtonFillOn(&g_sEStopButton);
+            PushButtonTextOn(&g_sEStopButton);
+            WidgetPaint((tWidget *)&g_sEStopButton);
+        }
+        else
+        {
+            // ACK pressed, return to STOP and grey out E-STOP
+            Motor.MotorState = STOP;
+            PushButtonTextSet(&g_sEStopButton, "E-STOP");
+            PushButtonFillColorSet(&g_sEStopButton, ClrGray);
+            PushButtonFillOn(&g_sEStopButton);
+            PushButtonTextOn(&g_sEStopButton);
+            WidgetPaint((tWidget *)&g_sEStopButton);
         }
         WidgetPaint((tWidget *)&g_sDashboard);
         return;
