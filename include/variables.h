@@ -63,18 +63,19 @@
 
 #define SECONDS_PER_MINUTE 60
 
-#define MAX_ACCELERATION_RPMS 500.0f
-#define MAX_DECELERATION_RPMS 500.0f
-#define ESTOP_DECELERATION_RPMS 1000.0f
+#define ACCELERATION_TOLERANCE 0.85f
+#define MAX_ACCELERATION_RPMS (ACCELERATION_TOLERANCE * 500.0f) 
+#define MAX_DECELERATION_RPMS (ACCELERATION_TOLERANCE * 500.0f)
+#define ESTOP_DECELERATION_RPMS (ACCELERATION_TOLERANCE * 1000.0f)
 
 static inline float count_to_rpm(int count)
 {
     return ((float)count / COUNT_PER_REVOLUTION) * PID_FREQUENCY * SECONDS_PER_MINUTE;
 }
-#define MOVING_AVERAGE_SAMPLES  100
+#define MOVING_AVERAGE_SAMPLES 60
 /* PID variables */
-#define Kp 0.0012 /* Proportional gain */
-#define Kd 0.0006 /* Derivative gain */
+#define Kp 0.16 /* Proportional gain */
+#define Kd 0.06 /* Derivative gain */
 #define Ki 0.038  /* Integral gain */
 
 #define dt 1/PID_FREQUENCY 

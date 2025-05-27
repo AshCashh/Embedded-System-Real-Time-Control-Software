@@ -82,6 +82,7 @@ extern motorcontrol_t motor_ctrl;
 volatile float latest_rpm;
 volatile uint32_t last_tick = 0;
 uint32_t last_hall_update = 0;
+volatile uint32_t count = 0;
 /*
  * Time stamp global variable.
  */
@@ -418,21 +419,26 @@ static void prvMotorPIDTask(void *parameters)
     const float max_accel_delta = (MAX_ACCELERATION_RPMS * dt);
     /* consider only regular deceleration for now */
     const float max_decel_delta = (MAX_DECELERATION_RPMS * dt);
+    float raw_rpm = 0;
+    float local_target_rpm;
+    uint32_t local_period;
     prvMotorStart();
-
+    
     for (;;)
     {
         if (xSemaphoreTake(xPIDTimerSemaphore, pdMS_TO_TICKS(2000)) != pdTRUE)
             continue;
 
         taskENTER_CRITICAL();
-        float raw_rpm = 0;
+
         /* clear stale data */
         if ((last_hall_update - xTaskGetTickCount()) > pdMS_TO_TICKS(800))
         {
             raw_rpm = 0;
         }
         raw_rpm = latest_rpm;
+        local_target_rpm = motor_ctrl.target_rpm;
+        local_period = motor_ctrl.period_value;
         taskEXIT_CRITICAL();
         rpm_sum -= rpm_buffer[rpm_index];
         rpm_buffer[rpm_index] = raw_rpm;
@@ -450,19 +456,7 @@ static void prvMotorPIDTask(void *parameters)
         float avg_acceleration = accel_sum / (float)MOVING_AVERAGE_SAMPLES;
         /* clamp local target rpm to prevent overshooting acceleration */
 
-        float local_target_rpm;
-        uint32_t local_period;
-        if (xSemaphoreTake(motor_ctrl.mutex, pdMS_TO_TICKS(20)) == pdTRUE)
-        {
-            local_target_rpm = motor_ctrl.target_rpm;
-            local_period = motor_ctrl.period_value;
-            xSemaphoreGive(motor_ctrl.mutex);
-        }
-        else
-        {
-            local_target_rpm = 0.0f;
-            local_period = motor_ctrl.period_value;
-        }
+
 
         if ((local_target_rpm - ramped_target_rpm) > max_accel_delta)
         {
@@ -476,7 +470,7 @@ static void prvMotorPIDTask(void *parameters)
         {
             ramped_target_rpm = local_target_rpm;
             /* use actual rpm to as reference now */
-        }
+        } 
 
         /* PID loop */
         float error = ramped_target_rpm - rpm;
@@ -500,9 +494,10 @@ static void prvMotorPIDTask(void *parameters)
         if (need_disable)
             disableMotor();
 
-        UARTprintf("%d, %d, %d, %d, %d\n",
+        UARTprintf("%d, %d, %d, %d, %d, %d\n",
                    (int)rpm,
                    (int)raw_rpm,
+                   (int)ramped_target_rpm,
                    (int)local_target_rpm,
                    (int)avg_acceleration,
                    (int)ramped_target_rpm);
@@ -528,7 +523,7 @@ void HallSensorHandler(void)
     GPIOIntClear(GPIO_PORTM_BASE, ui32StatusM);
     GPIOIntClear(GPIO_PORTH_BASE, ui32StatusH);
     GPIOIntClear(GPIO_PORTN_BASE, ui32StatusN);
-
+    count++;
     last_hall_update = xTaskGetTickCountFromISR();
     uint32_t tick_delta = last_hall_update - last_tick;
     last_tick = last_hall_update;
