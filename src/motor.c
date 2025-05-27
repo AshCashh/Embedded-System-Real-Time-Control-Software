@@ -96,6 +96,7 @@ extern SemaphoreHandle_t xPIDTimerSemaphore;
 extern SemaphoreHandle_t xCountMutex;
 extern SemaphoreHandle_t xEstop;
 extern SemaphoreHandle_t xEstopAcknowledge;
+extern SemaphoreHandle_t xPowerMotorCalcsemaphore;
 QueueHandle_t xMotorTimestampQueue;
 
 /*
@@ -116,6 +117,7 @@ static void prvMotorStart(void);
 
 static void prvEmergencyCheckTask(void *pvParameters);
 static void prvEmergencyAckTask(void *pvParameters);
+static void prvCurrentReadTask(void *pvParameters);
 
 /*
  * Called by main() to create the Hello print task.
@@ -159,18 +161,24 @@ void vCreateMotorTask(void)
                 tskIDLE_PRIORITY + 2,
                 NULL);
 
-    // xTaskCreate(prvEmergencyCheckTask,
-    //             "EmergencyCheck",
-    //             configMINIMAL_STACK_SIZE,
-    //             NULL,
-    //             tskIDLE_PRIORITY + 4,
-    //             NULL);
-    // xTaskCreate(prvEmergencyAckTask,
-    //             "EmergencyAck",
-    //             configMINIMAL_STACK_SIZE,
-    //             NULL,
-    //             tskIDLE_PRIORITY + 3,
-    //             NULL);
+    xTaskCreate(prvEmergencyCheckTask,
+                "EmergencyCheck",
+                configMINIMAL_STACK_SIZE,
+                NULL,
+                tskIDLE_PRIORITY + 4,
+                NULL);
+    xTaskCreate(prvEmergencyAckTask,
+                "EmergencyAck",
+                configMINIMAL_STACK_SIZE,
+                NULL,
+                tskIDLE_PRIORITY + 3,
+                NULL);
+    xTaskCreate(prvCurrentReadTask,
+                "CurrentRead",
+                configMINIMAL_STACK_SIZE,
+                NULL,
+                tskIDLE_PRIORITY + 1,
+                NULL);
 }
 /*-----------------------------------------------------------*/
 static void prvConfigureButton(void)
@@ -190,6 +198,89 @@ static void prvConfigureButton(void)
 
     /* Enable global interrupts in the NVIC. */
     IntMasterEnable();
+}
+
+static void prvCurrentReadTask(void *pvParameters)
+{
+    uint32_t adcValues[2];
+    float voltage0, voltage4, voltageE;
+    float current0, current4, currentE;
+
+    uint32_t counter = 0;
+
+    float filtered_current0, filtered_current4, filtered_currentE;
+
+    float current0_avg, current4_avg, currentE_avg;
+    current0_avg = 0.0f;
+    current4_avg = 0.0f;
+    currentE_avg = 0.0f;
+
+    UARTprintf("Current Read Task Started\n");
+
+    for (;;)
+    {
+        if (xSemaphoreTake(xPowerMotorCalcsemaphore, pdMS_TO_TICKS(1000)) == pdTRUE)
+        {
+
+            //  UARTprintf("before trigger\n");
+            // Trigger ADC1 conversion
+            ADCProcessorTrigger(ADC1_BASE, 1);
+            // UARTprintf("after trigger\n");
+
+            // Wait until complete
+            // UARTprintf("Waiting for ADC conversion...\n");
+            while (!ADCIntStatus(ADC1_BASE, 1, false))
+            {
+            }
+            // UARTprintf("ADC conversion complete\n");
+            // Clear ADC interrupt flag
+            ADCIntClear(ADC1_BASE, 1);
+
+            // Read conversion results
+            ADCSequenceDataGet(ADC1_BASE, 1, adcValues);
+
+            voltage0 = (float)(adcValues[0] / ADC_MAX_VALUE) * VREF;
+            voltage4 = (float)(adcValues[1] / ADC_MAX_VALUE) * VREF;
+            // voltageE = (float)(voltage0 + voltage4) / 2.0f;
+
+            // UARTprintf("%d,%d,%d\n", (int)(1000*voltage0), (int)(1000*voltage4),(int)(1000*voltageE));
+
+            // // Convert to current: I = (V/2 - 1.65) / (Rshunt × Gain)
+            current0 = ((VREF / 2 - voltage0) / (GAIN * RSHUNT)); // A
+            current4 = ((VREF / 2 - voltage4) / (GAIN * RSHUNT)); // A
+
+            // // I1 +I2 +I3 = 0 because the motor is a three-phase system
+            // // Current E is the estimated 3rd current
+            // // I3 = i(I1+I2)
+
+            currentE = -(current0 + current4);
+
+            // UARTprintf("%d,%d,%d\n", (int)(current0), (int)(current4), (int)(currentE));
+
+            current0_avg += current0;
+            current4_avg += current4;
+            currentE_avg += currentE;
+
+            counter++;
+
+            if (counter >= ADC_CURRENT_SAMPLES)
+            {
+                // Calculate the average current
+                filtered_current0 = AMPS_TO_MILLIAMPS((current0_avg /= ADC_CURRENT_SAMPLES));
+                filtered_current4 = AMPS_TO_MILLIAMPS((current4_avg /= ADC_CURRENT_SAMPLES));
+                filtered_currentE = AMPS_TO_MILLIAMPS((currentE_avg /= ADC_CURRENT_SAMPLES));
+                // print to uart
+                UARTprintf("%d,%d,%d\n", (int)filtered_current0, (int)filtered_current4, (int)filtered_currentE);
+                // Reset the counter and averages
+                counter = 0;
+                current0_avg = 0;
+                current4_avg = 0;
+                currentE_avg = 0;
+            }
+        }
+
+        // Use current0 and current4 in control logic or print/log
+    }
 }
 
 static void prvEmergencyCheckTask(void *pvParameters)
@@ -320,7 +411,7 @@ static void prvMotorPIDTask(void *parameters)
     static float accel_buffer[MOVING_AVERAGE_SAMPLES] = {0};
     static uint32_t accel_index = 0;
     static float accel_sum = 0.0f;
-    
+
     /* Ramp RPM to limit acceleration exceeding */
     static float ramped_target_rpm = 0.0f;
     /* RPM limit vars */
@@ -376,10 +467,13 @@ static void prvMotorPIDTask(void *parameters)
         if ((local_target_rpm - ramped_target_rpm) > max_accel_delta)
         {
             ramped_target_rpm += max_accel_delta;
-        } else if ((local_target_rpm - ramped_target_rpm) < -max_decel_delta)
+        }
+        else if ((local_target_rpm - ramped_target_rpm) < -max_decel_delta)
         {
             ramped_target_rpm -= max_decel_delta;
-        } else {
+        }
+        else
+        {
             ramped_target_rpm = local_target_rpm;
         }
 
@@ -389,7 +483,7 @@ static void prvMotorPIDTask(void *parameters)
         float derivative = (error - error_prev) / dt;
         error_prev = error;
         /* Clamp input to PWM duty cycle */
-        float u = clamp(Kp*error + Ki*integral + Kd*derivative, 2.0f, 100.0f);
+        float u = clamp(Kp * error + Ki * integral + Kd * derivative, 2.0f, 100.0f);
         uint32_t local_duty = PWM_TO_DUTY(local_period, u);
 
         bool need_disable = false;
@@ -402,17 +496,16 @@ static void prvMotorPIDTask(void *parameters)
         }
 
         setDuty(local_duty);
-        if (need_disable) disableMotor();
+        if (need_disable)
+            disableMotor();
 
-        UARTprintf("RPM: %d, Target: %d, AvgAccel: %d, Ramped Target RPM: %d\n",
-                   (int)rpm,
-                   (int)local_target_rpm,
-                   (int)avg_acceleration,
-                   (int)ramped_target_rpm);
+        // UARTprintf("RPM: %d, Target: %d, AvgAccel: %d, Ramped Target RPM: %d\n",
+        //            (int)rpm,
+        //            (int)local_target_rpm,
+        //            (int)avg_acceleration,
+        //            (int)ramped_target_rpm);
     }
 }
-
-
 
 /*-----------------------------------------------------------*/
 /* Interrupt handlers */
@@ -442,6 +535,7 @@ void HallSensorHandler(void)
     int tmp[3] = {0, 0, 0};
     getHallSensorValues(tmp);
     updateMotor(tmp[0], tmp[1], tmp[2]);
+    xSemaphoreGiveFromISR(xPowerMotorCalcsemaphore, &xMotorTaskWoken);
 }
 void xButtonsHandler(void)
 {

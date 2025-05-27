@@ -102,6 +102,8 @@ extern void xTimerHandler(void);
 
 extern void xPIDTimerHandler(void);
 
+static void prvConfigureADCInts(void);
+
 /*-----------------------------------------------------------*/
 /*
     Initialises sempahores
@@ -112,6 +114,7 @@ SemaphoreHandle_t xI2CMasterSemaphore = NULL;
 SemaphoreHandle_t xCountMutex = NULL;
 SemaphoreHandle_t xEstop = NULL;
 SemaphoreHandle_t xEstopAcknowledge = NULL;
+SemaphoreHandle_t xPowerMotorCalcsemaphore = NULL;
 
 /*-----------------------------------------------------------*/
 
@@ -122,6 +125,7 @@ int main( void )
     xI2CMasterSemaphore = xSemaphoreCreateBinary();
     xEstop = xSemaphoreCreateBinary();
     xEstopAcknowledge = xSemaphoreCreateBinary();
+    xPowerMotorCalcsemaphore = xSemaphoreCreateBinary();
 
     xCountMutex = xSemaphoreCreateMutex();
     motor_ctrl.mutex = xSemaphoreCreateMutex();
@@ -232,7 +236,7 @@ static void prvSetupHardware(void)
     /* Set-up interrupts for hall sensors */
     prvConfigureHallInts();
     /* Set-up adc interrupts for current measurements */
-    // prvConfigureADCInts();
+    prvConfigureADCInts();
 
 }
 /*-----------------------------------------------------------*/
@@ -306,6 +310,33 @@ static void prvConfigureHallInts( void )
     /* Enable global interrupts in the NVIC. */
     IntMasterEnable();
 }
+
+static void prvConfigureADCInts(void)
+{
+    /* Configure ADC1 to trigger an interrupt on conversion complete. */
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC1);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_ADC1))
+    {
+        // Wait for ADC1 to be ready
+    }
+    // Configure GPIOE pins as analog inputs
+    //ain0 = PE3, ain1 = PD7
+    GPIOPinTypeADC(GPIO_PORTE_BASE, GPIO_PIN_3);
+    GPIOPinTypeADC(GPIO_PORTD_BASE, GPIO_PIN_7);
+
+    // Configure ADC1 Sequencer 1 (SS1) with processor trigger
+    ADCSequenceConfigure(ADC1_BASE, 1, ADC_TRIGGER_PROCESSOR, 0);
+
+    // Step 0: AIN0 (PE3)
+    ADCSequenceStepConfigure(ADC1_BASE, 1, 0, ADC_CTL_CH0);
+    // Step 1: AIN4 (PE7), with IE and END
+    ADCSequenceStepConfigure(ADC1_BASE, 1, 1, ADC_CTL_CH4 | ADC_CTL_IE | ADC_CTL_END);
+
+    // Enable the sequencer and clear interrupt
+    ADCSequenceEnable(ADC1_BASE, 1);
+    ADCIntClear(ADC1_BASE, 1);
+}
+
 
 static void prvConfigurePIDTimer(void)
 {
