@@ -100,6 +100,8 @@ SemaphoreHandle_t xButton2Semaphore = NULL;
 SemaphoreHandle_t xIC2MasterSemaphore = NULL;
 SemaphoreHandle_t xSampleLightSemaphore = NULL;
 SemaphoreHandle_t xSampleAccelSemaphore = NULL;
+SemaphoreHandle_t xEmergencyStop = NULL;
+
 SemaphoreHandle_t xI2CMutex = NULL;
 extern SemaphoreHandle_t xSemaphoreTimer0;
 
@@ -177,9 +179,10 @@ int main(void)
     xSampleLightSemaphore = xSemaphoreCreateBinary();
     xSampleAccelSemaphore = xSemaphoreCreateBinary();
     xSemaphoreTimer0 = xSemaphoreCreateBinary();
+    xEmergencyStop = xSemaphoreCreateBinary();
     xI2CMutex = xSemaphoreCreateMutex();
 
-    if (xButton1Semaphore != NULL && xButton2Semaphore != NULL && xIC2MasterSemaphore != NULL && xSampleLightSemaphore != NULL && xI2CMutex != NULL)
+    if (xButton1Semaphore != NULL && xButton2Semaphore != NULL && xIC2MasterSemaphore != NULL && xSampleLightSemaphore != NULL && xI2CMutex != NULL && xEmergencyStop != NULL)
     {
         taskENTER_CRITICAL();
         /* Configure application specific hardware and initialize the task thread. */

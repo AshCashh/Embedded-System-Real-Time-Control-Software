@@ -124,12 +124,14 @@
 
 extern SemaphoreHandle_t xIC2MasterSemaphore;
 extern SemaphoreHandle_t xSampleAccelSemaphore;
+extern SemaphoreHandle_t xEmergencyStop;
 
 extern uint32_t g_ui32SysClock;
 
 tContext sContext;
 // Moving average filter variables
 #define FILTER_SIZE 20
+#define CRASH_LIMIT 2
 static float filterBufferX[FILTER_SIZE] = {0};
 static float filterBufferY[FILTER_SIZE] = {0};
 static float filterBufferZ[FILTER_SIZE] = {0};
@@ -273,9 +275,12 @@ static void prvAccelTask(void *pvParameters)
             float filteredZ = filterSumZ / FILTER_SIZE;
 
             // Calculate average absolute acceleration
-            float avgAbsAccel = (fabs(filteredX) + fabs(filteredY) + fabs(fabs(filteredZ))) / 3.0f;
-            float avgAbsAccel_raw = (fabs(accelX) + fabs(accelY) + fabs(fabs(accelZ))) / 3.0f;
+            float avgAbsAccel = (fabs(filteredX) + fabs(filteredY) + fabs(filteredZ)) / 3.0f;
+            float avgAbsAccel_raw = (fabs(accelX) + fabs(accelY) + fabs(accelZ)) / 3.0f;
 
+            if (avgAbsAccel >= CRASH_LIMIT) {
+                xSemaphoreGive(xEmergencyStop);
+            }
             // add to queue (both raw and filtered values)
             xMessage.ulTimeStamp = xTaskGetTickCount();
             xMessage.uFiltered = avgAbsAccel;
