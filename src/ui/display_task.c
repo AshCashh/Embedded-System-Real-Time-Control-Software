@@ -42,7 +42,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "semphr.h"
-
+#include "event_groups.h"
 /* Hardware includes. */
 #include "inc/hw_ints.h"
 #include "inc/hw_memmap.h"
@@ -75,12 +75,18 @@
 #include "drivers/touch.h"
 #include "images.h"
 #include "driverlib/timer.h"
+#include "includes/common.h"
 #include "includes/motor.h"
+#include "includes/light_sensor_task.h"
+#include "includes/accel_sensor_task.h"
 #include "includes/shared_variables.h"
+#include "includes/display_task.h"
 /*-----------------------------------------------------------*/
 #include <stdbool.h>
 #define RPM_MIN 0
-#define RPM_MAX 2500
+#define RPM_MAX 5000
+extern uint32_t accel_threshold;
+extern uint32_t current_threshold;
 //*****************************************************************************
 //
 // The error routine that is called if the driver library encounters an error.
@@ -91,7 +97,28 @@ void __error__(char *pcFilename, uint32_t ui32Line)
 {
 }
 #endif
+typedef enum
+{
+    PLOT_LIGHT,
+    PLOT_ACCEL,
+    PLOT_RPM,
+    PLOT_POWER
+} PlotType;
+#define LIGHT_DATA_BUFFER_SIZE 100
+uint32_t g_ui32LightDataBuffer[LIGHT_DATA_BUFFER_SIZE] = {0};
+uint32_t g_ui32LightDataIndex = 0;
+volatile PlotType g_eCurrentPlot;
 
+#define ACCEL_DATA_BUFFER_SIZE 300
+uint32_t g_ui32AccelDataBuffer[ACCEL_DATA_BUFFER_SIZE] = {0};
+uint32_t g_ui32AccelDataIndex = 0;
+
+bool day = false;
+uint32_t g_ui32LightDataCount = 0;
+uint32_t g_ui32AccelDataCount = 0;
+
+extern tCanvasWidget g_sCanvas3;
+extern tCanvasWidget g_sCanvas1;
 //*****************************************************************************
 //
 // Gloal variable used to store the frequency of the system clock.
@@ -105,14 +132,16 @@ uint32_t luxValue = 10;
 // timer
 #define MAX_TIME_LENGTH 9
 #define MAX_DATE_LENGTH 6
-
+extern SemaphoreHandle_t xEmergencyStop;
 SemaphoreHandle_t xSemaphoreTimer0 = NULL;
+extern SemaphoreHandle_t xEmergencyMutex;
 volatile uint8_t timer_hours;
 volatile uint8_t timer_minutes;
 volatile uint8_t timer_seconds;
 char time_string[MAX_TIME_LENGTH];
 char date[MAX_DATE_LENGTH];
-
+volatile bool g_bLightPlotEnabled = false;
+volatile bool g_bAccelPlotEnabled = false;
 //*****************************************************************************
 //
 // The DMA control structure table.
@@ -144,6 +173,7 @@ void OnButtonPress(tWidget *psWidget);
 void OnSliderChange(tWidget *psWidget, int32_t i32Value);
 extern tCanvasWidget g_psPanels[];
 
+static void vSensorData(uint32_t *data, int dataSize, PlotType plotType, bool filtered);
 /*
  * The tasks as described in the comments at the top of this file.
  */
@@ -154,7 +184,7 @@ void SetStartTime(uint8_t hours, uint8_t minutes, uint8_t seconds, const char *s
 void intToTwoDigitString(uint8_t num, char *str);
 void UpdateTimeString(uint8_t hours, uint8_t minutes, uint8_t seconds, char *timeStr);
 
-void OnLimitSliderChange(tWidget *psWidget, int32_t i32Value); 
+void OnLimitSliderChange(tWidget *psWidget, int32_t i32Value);
 
 void UpdateTime(void)
 {
@@ -276,7 +306,6 @@ OnRpmChange(tWidget *psWidget, int32_t i32Value)
 //*****************************************************************************
 // Define sliders for motor limits
 
-
 //*****************************************************************************
 //
 // The first panel, which demonstrates the graphics primitives.
@@ -285,7 +314,7 @@ OnRpmChange(tWidget *psWidget, int32_t i32Value)
 
 tSliderWidget g_psSliders[] =
     {
-        SliderStruct(g_psPanels + 1, 0, 0, // parent, next, prev
+        SliderStruct(g_psPanels + 1, 0, 0,                                       // parent, next, prev
                      &g_sKentec320x240x16_SSD2119, 150, 60, 140, 30, 0, 100, 25, // x, y, width, height
                      (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE |
                       SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
@@ -293,71 +322,55 @@ tSliderWidget g_psSliders[] =
                      &g_sFontCm20, "25%", 0, 0, OnSliderChange),
 };
 
-
 tSliderWidget g_psLimitSliders[] = {
-    // Current Lower Limit
-    SliderStruct(g_psPanels + 1, &g_psLimitSliders[1], 0, &g_sKentec320x240x16_SSD2119,
-        20, 45, 280, 30, 0, 100, 10, // x, y, width, height
-        (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
-        ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
-        &g_sFontCm20, "10 A", 0, 0, OnLimitSliderChange),
-    // Current Upper Limit
-    SliderStruct(g_psPanels + 1, &g_psLimitSliders[2], 0, &g_sKentec320x240x16_SSD2119,
-        20, 75, 280, 30, 0, 100, 50,
-        (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
-        ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
-        &g_sFontCm20, "50 A", 0, 0, OnLimitSliderChange),
-    // Acceleration Lower Limit
-    SliderStruct(g_psPanels + 1, &g_psLimitSliders[3], 0, &g_sKentec320x240x16_SSD2119,
-        20, 130, 280, 30, 0, 20, 5,
-        (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
-        ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
-        &g_sFontCm20, "5 g", 0, 0, OnLimitSliderChange),
-    // Acceleration Upper Limit
+    // Current Threshold
     SliderStruct(g_psPanels + 1, 0, 0, &g_sKentec320x240x16_SSD2119,
-        20, 160, 280, 30, 0, 20, 15,
-        (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
-        ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
-        &g_sFontCm20, "15 g", 0, 0, OnLimitSliderChange),
+                 20, 45, 280, 30, 0, 2000, 1000, // x, y, width, height
+                 (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
+                 ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
+                 &g_sFontCm20, "Current Threshold:", 0, 0, OnLimitSliderChange),
+    // Acceleration Threshold
+    SliderStruct(g_psPanels + 1, 0, 0, &g_sKentec320x240x16_SSD2119,
+                 20, 100, 280, 30, 0, 25, 10, // x, y, width, height, 
+                 (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
+                 ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
+                 &g_sFontCm20, "Acceleration Threshold:", 0, 0, OnLimitSliderChange),
 };
 
 tCanvasWidget g_sLimitSlidersCanvas = CanvasStruct(
-    g_psPanels + 1, // parent
-    0,              // next
+    g_psPanels + 1,       // parent
+    0,                    // next
     &g_psLimitSliders[0], // child: first slider
     &g_sKentec320x240x16_SSD2119,
-    0, 0,           // x, y
-    320, 190,       // width, height
+    0, 0,                                       // x, y
+    320, 190,                                   // width, height
     CANVAS_STYLE_FILL | CANVAS_STYLE_APP_DRAWN, // style
-    ClrBlack,       // fill color
-    0,              // outline color
-    0,              // text color
-    &g_sFontCm20,   // font
-    0,              // text
-    0,              // image
-    OnMotorPanelPaint // paint callback
+    ClrBlack,                                   // fill color
+    0,                                          // outline color
+    0,                                          // text color
+    &g_sFontCm20,                               // font
+    0,                                          // text
+    0,                                          // image
+    OnMotorPanelPaint                           // paint callback
 );
 
 void OnLimitSliderChange(tWidget *psWidget, int32_t i32Value)
 {
-    static char pcText[8];
+    static char pcText[99];
 
-    if (psWidget == (tWidget *)&g_psLimitSliders[0]) {
-        Motor.current_limit.lower = i32Value;
-        usprintf(pcText, "Min: %d A", i32Value);
+    if (psWidget == (tWidget *)&g_psLimitSliders[0])
+    {
+        current_threshold = i32Value;
+        usprintf(pcText, "Current: %d mA", i32Value);
         SliderTextSet(&g_psLimitSliders[0], pcText);
-    } else if (psWidget == (tWidget *)&g_psLimitSliders[1]) {
-        Motor.current_limit.upper = i32Value;
-        usprintf(pcText, "Max: %d A", i32Value);
+    }
+    else if (psWidget == (tWidget *)&g_psLimitSliders[1])
+    {
+        xSemaphoreTake(xEmergencyMutex, pdMS_TO_TICKS(100));
+        accel_threshold = i32Value;
+        xSemaphoreGive(xEmergencyMutex);
+        usprintf(pcText, "Acceleration: %d ms^-2", i32Value);
         SliderTextSet(&g_psLimitSliders[1], pcText);
-    } else if (psWidget == (tWidget *)&g_psLimitSliders[2]) {
-        Motor.acceleration_limit.lower = i32Value;
-        usprintf(pcText, "Min: %d g", i32Value);
-        SliderTextSet(&g_psLimitSliders[2], pcText);
-    } else if (psWidget == (tWidget *)&g_psLimitSliders[3]) {
-        Motor.acceleration_limit.upper = i32Value;
-        usprintf(pcText, "Max: %d g", i32Value);
-        SliderTextSet(&g_psLimitSliders[3], pcText);
     }
     WidgetPaint(psWidget);
 }
@@ -366,72 +379,6 @@ void OnLimitSliderChange(tWidget *psWidget, int32_t i32Value)
 #define SLIDER_CANVAS_VAL_INDEX 4
 
 #define NUM_SLIDERS (sizeof(g_psSliders) / sizeof(g_psSliders[0]))
-
-
-// Forward declarations for button handlers
-void OnPlotSelectButton(tWidget *psWidget);
-// Forward declarations for plot select buttons
-extern tPushButtonWidget g_sPlotBtnAccel;
-extern tPushButtonWidget g_sPlotBtnRPM;
-extern tPushButtonWidget g_sPlotBtnPower;
-
-// Now define the buttons in order
-tPushButtonWidget g_sPlotBtnLight = RectangularButtonStruct(
-    g_psPanels + 2, &g_sPlotBtnAccel, 0, &g_sKentec320x240x16_SSD2119,
-    10, 5, 70, 28,
-    PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT,
-    ClrGray, ClrSilver, ClrWhite, ClrBlack,
-    &g_sFontCm18, "Light", 0, 0, 0, 0,
-    OnPlotSelectButton);
-
-tPushButtonWidget g_sPlotBtnAccel = RectangularButtonStruct(
-    g_psPanels + 2, &g_sPlotBtnRPM, 0, &g_sKentec320x240x16_SSD2119,
-    90, 5, 90, 28,
-    PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT,
-    ClrGray, ClrSilver, ClrWhite, ClrBlack,
-    &g_sFontCm18, "Acceleration", 0, 0, 0, 0,
-    OnPlotSelectButton);
-
-tPushButtonWidget g_sPlotBtnRPM = RectangularButtonStruct(
-    g_psPanels + 2, &g_sPlotBtnPower, 0, &g_sKentec320x240x16_SSD2119,
-    190, 5, 60, 28,
-    PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT,
-    ClrGray, ClrSilver, ClrWhite, ClrBlack,
-    &g_sFontCm18, "RPM", 0, 0, 0, 0,
-    OnPlotSelectButton);
-
-tPushButtonWidget g_sPlotBtnPower = RectangularButtonStruct(
-    g_psPanels + 2, 0, 0, &g_sKentec320x240x16_SSD2119,
-    260, 5, 50, 28,
-    PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT,
-    ClrGray, ClrSilver, ClrWhite, ClrBlack,
-    &g_sFontCm18, "Power", 0, 0, 0, 0,
-    OnPlotSelectButton);
-             
-tCanvasWidget g_sSensorPanelCanvas = CanvasStruct(
-    g_psPanels + 2, // parent
-    0,              // next
-    &g_sPlotBtnLight, // child: first plot select button
-    &g_sKentec320x240x16_SSD2119,
-    0, 0,           // x, y
-    320, 190,       // width, height
-    CANVAS_STYLE_FILL, // style
-    ClrBlack, 0, 0, 0, 0, 0, 0
-);
-// Implement the button handler
-void OnPlotSelectButton(tWidget *psWidget)
-{
-    // Set a global variable to indicate which plot to show
-    if (psWidget == (tWidget *)&g_sPlotBtnLight) {
-        // Show Light plot
-    } else if (psWidget == (tWidget *)&g_sPlotBtnAccel) {
-        // Show Acceleration plot
-    } else if (psWidget == (tWidget *)&g_sPlotBtnRPM) {
-        // Show RPM plot
-    } else if (psWidget == (tWidget *)&g_sPlotBtnPower) {
-        // Show Motor Power plot
-    }
-}
 
 tCanvasWidget g_psCheckBoxIndicators[] =
     {
@@ -472,17 +419,26 @@ tPushButtonWidget g_psPushButtons[] =
                              ClrMidnightBlue, ClrBlack, ClrGray, ClrSilver,
                              &g_sFontCm22, "3", 0, 0, 0, 0, OnButtonPress),
 };
-tPushButtonWidget g_sStopButton = RectangularButtonStruct(
+tPushButtonWidget g_sEStopButton = RectangularButtonStruct(
     g_psPanels, 0, 0, &g_sKentec320x240x16_SSD2119,
-    190, 120 - 20, 80, 40,                            // x, y, width, height
-    PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT, // style: fill, outline, text
-    ClrRed, ClrGray, ClrWhite, ClrWhite,              // colors: fill, press fill, outline, text
+    210, 100, 80, 40, // x, y, width, height (adjust as needed)
+    PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT,
+    ClrGray, ClrGray, ClrWhite, ClrWhite,
+    &g_sFontCm20, "E-STOP", 0, 0, 0, 0,
+    OnButtonPress);
+
+// Update Stop button position to make space for E-STOP
+tPushButtonWidget g_sStopButton = RectangularButtonStruct(
+    g_psPanels, &g_sEStopButton, 0, &g_sKentec320x240x16_SSD2119,
+    120, 100, 80, 40,
+    PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT,
+    ClrRed, ClrGray, ClrWhite, ClrWhite,
     &g_sFontCm20, "Stop", 0, 0, 0, 0,
     OnButtonPress);
 
 tPushButtonWidget g_sStartButton = RectangularButtonStruct(
     g_psPanels, &g_sStopButton, 0, &g_sKentec320x240x16_SSD2119,
-    50, 120 - 20, 80, 40,
+    30, 120 - 20, 80, 40,
     PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT,
     ClrGreen, ClrGray, ClrWhite, ClrWhite,
     &g_sFontCm20, "Start", 0, 0, 0, 0,
@@ -512,19 +468,142 @@ uint32_t g_ui32ButtonState;
 // The third panel, which demonstrates the canvas widget.
 //
 //*****************************************************************************
-// change this to show how to make a simple plot
-Canvas(g_sCanvas3, g_psPanels + 2, 0, 0, &g_sKentec320x240x16_SSD2119, 20,
-       27, 200, 140, CANVAS_STYLE_OUTLINE | CANVAS_STYLE_APP_DRAWN, 0, ClrGray,
-       0, 0, 0, 0, OnCanvasPaint);
-// Canvas(g_sCanvas2, g_psPanels + 2, 0, 0,
-//        &g_sKentec320x240x16_SSD2119, 20, 27, 140, 150,
-//        CANVAS_STYLE_OUTLINE | CANVAS_STYLE_IMG, 0, ClrGray, 0, 0, 0, g_pui8Logo,
-//        0);
-Canvas(g_sCanvas1, g_psPanels + 2, &g_sCanvas3, 0,
-       &g_sKentec320x240x16_SSD2119, 230, 27, 90, 140,
-       CANVAS_STYLE_FILL | CANVAS_STYLE_OUTLINE | CANVAS_STYLE_TEXT,
-       ClrMidnightBlue, ClrGray, ClrSilver, &g_sFontCm22, "Text", 0, 0);
+// Forward declarations for button handlers
+void OnPlotSelectButton(tWidget *psWidget);
+// Forward declarations for plot select buttons
+extern tPushButtonWidget g_sPlotBtnAccel;
+extern tPushButtonWidget g_sPlotBtnRPM;
+extern tPushButtonWidget g_sPlotBtnPower;
 
+// Now define the buttons in order
+tPushButtonWidget g_sPlotBtnLight = RectangularButtonStruct(
+    g_psPanels + 2, &g_sPlotBtnAccel, 0, &g_sKentec320x240x16_SSD2119,
+    25, 5, 70, 28, // x, y, width, height
+    PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT,
+    ClrGray, ClrSilver, ClrWhite, ClrWhite, // colors : 
+    &g_sFontCm18, "Light", 0, 0, 0, 0,
+    OnPlotSelectButton);
+
+tPushButtonWidget g_sPlotBtnAccel = RectangularButtonStruct(
+    g_psPanels + 2, &g_sPlotBtnRPM, 0, &g_sKentec320x240x16_SSD2119,
+    105, 5, 90, 28,
+    PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT,
+    ClrGray, ClrSilver, ClrWhite, ClrWhite, // colors: fill, outline, text, background
+    &g_sFontCm18, "Acceleration", 0, 0, 0, 0,
+    OnPlotSelectButton);
+
+tPushButtonWidget g_sPlotBtnRPM = RectangularButtonStruct(
+    g_psPanels + 2, &g_sPlotBtnPower, 0, &g_sKentec320x240x16_SSD2119,
+    205, 5, 60, 28,
+    PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT,
+    ClrGray, ClrSilver, ClrWhite, ClrWhite,
+    &g_sFontCm18, "RPM", 0, 0, 0, 0,
+    OnPlotSelectButton);
+
+// Change the last plot button's next pointer to the plot canvas
+tPushButtonWidget g_sPlotBtnPower = RectangularButtonStruct(
+    g_psPanels + 2, &g_sCanvas3, 0, &g_sKentec320x240x16_SSD2119,
+    270, 5, 50, 28,
+    PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT,
+    ClrGray, ClrSilver, ClrWhite, ClrWhite,
+    &g_sFontCm18, "Power", 0, 0, 0, 0,
+    OnPlotSelectButton);
+
+Canvas(g_sCanvas3, g_psPanels + 2, 0, 0,
+       &g_sKentec320x240x16_SSD2119, 0, 35, 320, 155,
+       CANVAS_STYLE_OUTLINE | CANVAS_STYLE_APP_DRAWN, 0, ClrGray,
+       0, 0, 0, 0, OnCanvasPaint);
+
+// Now, the sensor panel canvas should have the first plot button as its child
+tCanvasWidget g_sSensorPanelCanvas = CanvasStruct(
+    g_psPanels + 2,   // parent
+    0,                // next
+    &g_sPlotBtnLight, // child: first plot select button
+    &g_sKentec320x240x16_SSD2119,
+    0, 0,              // x, y
+    320, 190,          // width, height
+    CANVAS_STYLE_FILL, // style
+    ClrBlack, 0, 0, 0, 0, 0, 0);
+
+// Implement the button handler
+void OnPlotSelectButton(tWidget *psWidget)
+{
+    // Reset all plot buttons to default color
+    PushButtonFillColorSet(&g_sPlotBtnLight, ClrGray);
+    PushButtonFillColorSet(&g_sPlotBtnAccel, ClrGray);
+    PushButtonFillColorSet(&g_sPlotBtnRPM, ClrGray);
+    PushButtonFillColorSet(&g_sPlotBtnPower, ClrGray);
+
+    g_bLightPlotEnabled = false; // Default: plotting disabled
+    g_bAccelPlotEnabled = false; // Default: plotting disabled
+
+    if (psWidget == (tWidget *)&g_sPlotBtnLight)
+    {
+        g_eCurrentPlot = PLOT_LIGHT;
+        PushButtonFillColorSet(&g_sPlotBtnLight, ClrYellow);
+
+        // Reset buffer and index for new plot
+        for (uint32_t i = 0; i < LIGHT_DATA_BUFFER_SIZE; i++)
+            g_ui32LightDataBuffer[i] = 0;
+        g_ui32LightDataIndex = 0;
+        g_ui32LightDataCount = 0;
+
+        g_bLightPlotEnabled = true; // Enable plotting for light
+
+        // Draw axes and labels immediately
+        tRectangle sRect = {10, 40, 310, 180};
+        GrContextForegroundSet(&sContext, ClrBlack);
+        GrRectFill(&sContext, &sRect);
+        GrContextForegroundSet(&sContext, ClrWhite);
+        GrLineDraw(&sContext, 10, 180, 310, 180); // X-axis
+        GrLineDraw(&sContext, 10, 40, 10, 180);   // Y-axis
+        // GrContextFontSet(&sContext, g_psFontFixed6x8);
+        // GrStringDraw(&sContext, "Time", -1, 160, 192, false);
+        // GrStringDraw(&sContext, "Lux", -1, 20, 35, false);
+    }
+    else if (psWidget == (tWidget *)&g_sPlotBtnAccel)
+    {
+        g_eCurrentPlot = PLOT_ACCEL;
+        PushButtonFillColorSet(&g_sPlotBtnAccel, ClrYellow);
+
+        // Reset buffer and index for new plot
+        for (uint32_t i = 0; i < ACCEL_DATA_BUFFER_SIZE; i++)
+            g_ui32AccelDataBuffer[i] = 0;
+        g_ui32AccelDataIndex = 0;
+        g_ui32AccelDataCount = 0;
+
+        g_bAccelPlotEnabled = true; // Enable plotting for light
+
+        // Draw axes and labels immediately
+        tRectangle sRect = {10, 40, 310, 180};
+        GrContextForegroundSet(&sContext, ClrBlack);
+        GrRectFill(&sContext, &sRect);
+        GrContextForegroundSet(&sContext, ClrWhite);
+        GrLineDraw(&sContext, 10, 180, 310, 180); // X-axis
+        GrLineDraw(&sContext, 10, 40, 10, 180);   // Y-axis
+    }
+    else if (psWidget == (tWidget *)&g_sPlotBtnRPM)
+    {
+        g_eCurrentPlot = PLOT_RPM;
+        PushButtonFillColorSet(&g_sPlotBtnRPM, ClrYellow);
+        // (reset rpm buffer here if you add it)
+    }
+    else if (psWidget == (tWidget *)&g_sPlotBtnPower)
+    {
+        g_eCurrentPlot = PLOT_POWER;
+        PushButtonFillColorSet(&g_sPlotBtnPower, ClrYellow);
+        // (reset power buffer here if you add it)
+    }
+
+    // Repaint all plot buttons to update highlight
+    WidgetPaint((tWidget *)&g_sPlotBtnLight);
+    WidgetPaint((tWidget *)&g_sPlotBtnAccel);
+    WidgetPaint((tWidget *)&g_sPlotBtnRPM);
+    WidgetPaint((tWidget *)&g_sPlotBtnPower);
+
+    // Force a repaint of the third panel
+    WidgetPaint((tWidget *)&g_psPanels[2]);
+}
 //*****************************************************************************
 //
 // An array of canvas widgets, one per panel.  Each canvas is filled with
@@ -532,16 +611,16 @@ Canvas(g_sCanvas1, g_psPanels + 2, &g_sCanvas3, 0,
 //
 //*****************************************************************************
 tCanvasWidget g_psPanels[] =
-{
-    // Dashboard panel
-    CanvasStruct(0, 0, &g_sDashboard, &g_sKentec320x240x16_SSD2119, 0, 0,
-                 320, 190, CANVAS_STYLE_FILL, ClrBlack, 0, 0, 0, 0, 0, 0),
-    // Motor Control panel (second panel)
-    CanvasStruct(0, 0, &g_sLimitSlidersCanvas, &g_sKentec320x240x16_SSD2119, 0, 0,
-                 320, 190, CANVAS_STYLE_FILL, ClrBlack, 0, 0, 0, 0, 0, 0),
-    // Sensor Graphs panel
-    CanvasStruct(0, 0, &g_sSensorPanelCanvas, &g_sKentec320x240x16_SSD2119, 0, 0, 320,
-                 190, CANVAS_STYLE_FILL, ClrBlack, 0, 0, 0, 0, 0, 0),
+    {
+        // Dashboard panel
+        CanvasStruct(0, 0, &g_sDashboard, &g_sKentec320x240x16_SSD2119, 0, 0,
+                     320, 190, CANVAS_STYLE_FILL, ClrBlack, 0, 0, 0, 0, 0, 0),
+        // Motor Control panel (second panel)
+        CanvasStruct(0, 0, &g_sLimitSlidersCanvas, &g_sKentec320x240x16_SSD2119, 0, 0,
+                     320, 190, CANVAS_STYLE_FILL, ClrBlack, 0, 0, 0, 0, 0, 0),
+        // Sensor Graphs panel
+        CanvasStruct(0, 0, &g_sSensorPanelCanvas, &g_sKentec320x240x16_SSD2119, 0, 0, 320,
+                     190, CANVAS_STYLE_FILL, ClrBlack, 0, 0, 0, 0, 0, 0),
 };
 
 //*****************************************************************************
@@ -582,8 +661,6 @@ RectangularButton(g_sNext, 0, 0, 0, &g_sKentec320x240x16_SSD2119, 275, 195,
                   40, 40, PB_STYLE_IMG | PB_STYLE_TEXT, ClrBlack, ClrBlack, 0,
                   ClrSilver, &g_sFontCm20, "+", g_pui8Blue50x50,
                   g_pui8Blue50x50Press, 0, 0, OnNext);
-
-
 
 //*****************************************************************************
 //
@@ -691,7 +768,11 @@ void OnNext(tWidget *psWidget)
     //
     WidgetAdd(WIDGET_ROOT, (tWidget *)(g_psPanels + g_ui32Panel));
     WidgetPaint((tWidget *)(g_psPanels + g_ui32Panel));
-
+    if (g_ui32Panel == 1) {
+        WidgetAdd((tWidget *)(g_psPanels + 1), (tWidget *)&g_sLimitSlidersCanvas);
+        WidgetAdd((tWidget *)&g_sLimitSlidersCanvas, (tWidget *)&g_psLimitSliders[0]);
+        WidgetAdd((tWidget *)&g_sLimitSlidersCanvas, (tWidget *)&g_psLimitSliders[1]);
+    }
     //
     // Set the title of this panel.
     //
@@ -753,29 +834,29 @@ void OnIntroPaint(tWidget *psWidget, tContext *psContext)
     sRect.i16YMax = 30 - 15;
     // Dynamically update STOP button label and color
 
-    WidgetPaint((tWidget *)&g_sStopButton);
+    // Dynamically update STOP and START button label and color
     switch (Motor.MotorState)
     {
     case RUNNING:
-        PushButtonFillColorSet(&g_sStartButton, ClrGreen);
+        PushButtonFillColorSet(&g_sStartButton, ClrGray); // Start button greyed
         PushButtonTextSet(&g_sStopButton, "Stop");
-        PushButtonFillColorSet(&g_sStopButton, ClrRed);
+        PushButtonFillColorSet(&g_sStopButton, ClrRed); // Stop button active
         GrContextForegroundSet(psContext, ClrBlue);
         pcState = "RUNNING";
         break;
     case STOP:
         GrContextForegroundSet(psContext, ClrRed);
-
         PushButtonTextSet(&g_sStopButton, "Stop");
-        PushButtonFillColorSet(&g_sStopButton, ClrRed);
-        PushButtonFillColorSet(&g_sStartButton, ClrGreen);
-        pcState = "STOP";
+        PushButtonFillColorSet(&g_sStopButton, ClrGray);   // Stop button greyed
+        PushButtonFillColorSet(&g_sStartButton, ClrGreen); // Start button active
+        pcState = "STOPPED";
         break;
     case ESTOP:
+        // Start button can remain green or greyed out as you wish
         PushButtonFillColorSet(&g_sStartButton, ClrGreen);
-        PushButtonTextSet(&g_sStopButton, "ACK");
-        PushButtonFillColorSet(&g_sStopButton, ClrOrange);
-
+        // Stop button should remain greyed out and say "Stop"
+        PushButtonTextSet(&g_sStopButton, "Stop");
+        PushButtonFillColorSet(&g_sStopButton, ClrGray);
         GrContextForegroundSet(psContext, ClrOrange);
         pcState = "E-STOP";
         break;
@@ -786,6 +867,27 @@ void OnIntroPaint(tWidget *psWidget, tContext *psContext)
     GrCircleFill(psContext, 240, 40 - 15, 8);
     GrContextForegroundSet(psContext, ClrWhite);
     GrCircleDraw(psContext, 240, 40 - 15, 8);
+
+    // Draw/paint the E-STOP button
+    WidgetPaint((tWidget *)&g_sStopButton);
+    WidgetPaint((tWidget *)&g_sStartButton);
+    WidgetPaint((tWidget *)&g_sEStopButton);
+    // E-STOP button state logic
+    if (Motor.MotorState == ESTOP)
+    {
+        PushButtonTextSet(&g_sEStopButton, "ACK");
+        PushButtonFillColorSet(&g_sEStopButton, ClrOrange);
+        PushButtonFillOn(&g_sEStopButton);
+        PushButtonTextOn(&g_sEStopButton);
+    }
+    else
+    {
+        PushButtonTextSet(&g_sEStopButton, "E-STOP");
+        PushButtonFillColorSet(&g_sEStopButton, ClrGray);
+        PushButtonFillOn(&g_sEStopButton);
+        PushButtonTextOn(&g_sEStopButton);
+    }
+    WidgetPaint((tWidget *)&g_sEStopButton);
 
     // Draw the "MOTOR STATUS:" label
     GrContextFontSet(psContext, &g_sFontCm18);
@@ -807,8 +909,7 @@ void OnIntroPaint(tWidget *psWidget, tContext *psContext)
     dayNightRect.i16YMin = 8;
     dayNightRect.i16XMax = 319 - 8; // 8px padding from right
     dayNightRect.i16YMax = 8 + 24;  // 24px tall
-    luxValue = 3;
-    if (luxValue < 5)
+    if (!day)
     {
         // Night: blue box, white text "Night"
         GrContextForegroundSet(psContext, ClrBlack);
@@ -837,25 +938,11 @@ void OnMotorPanelPaint(tWidget *psWidget, tContext *psContext)
 {
     GrContextFontSet(psContext, &g_sFontCm20);
     GrContextForegroundSet(psContext, ClrWhite);
-    // draw a Threshold Parameter label
-    // Center "Threshold Parameters" at the top of the panel
     GrStringDrawCentered(psContext, "Threshold Parameters", -1, 160, 10, false);
-    // Draw labels for each slider
     GrContextFontSet(psContext, &g_sFontCm16);
     GrContextForegroundSet(psContext, ClrGray);
-    GrStringDraw(psContext, "Current Upper/Lower", -1, 10, 25, false);
-    // Add a border box around the text and sliders
-    // tRectangle sRect;
-    // sRect.i16XMin = 10;
-    // sRect.i16YMin = 10;
-    // sRect.i16XMax = 310;
-    // sRect.i16YMax = 190;
-    // GrContextForegroundSet(psContext, ClrGray);
-    // GrRectDraw(psContext, &sRect);
-    GrStringDraw(psContext, "Acceleration Upper/Lower", -1, 10, 110, false);
-    // GrStringDraw(psContext, "Current Upper", -1, 10, 70, false);
-    // GrStringDraw(psContext, "Accel Lower", -1, 10, 110, false);
-    // GrStringDraw(psContext, "Accel Upper", -1, 10, 150, false);
+    GrStringDraw(psContext, "Current Threshold", -1, 10, 25, false);
+    GrStringDraw(psContext, "Acceleration Threshold", -1, 10, 80, false);
 }
 //*****************************************************************************
 //
@@ -864,53 +951,28 @@ void OnMotorPanelPaint(tWidget *psWidget, tContext *psContext)
 //*****************************************************************************
 void OnCanvasPaint(tWidget *psWidget, tContext *psContext)
 {
-
-    // define and draw the scale
-    uint32_t xMax = 10;
-    uint32_t yMax = 90;
-    GrContextFontSet(&sContext, &g_sFontCm20);
-    GrStringDrawCentered(&sContext, "90", -1,
-                         10, 33, 0);
-    GrStringDrawCentered(&sContext, "0", -1,
-                         10, 160, 0);
-    GrStringDrawCentered(&sContext, "0s", -1,
-                         30, 175, 0);
-    GrStringDrawCentered(&sContext, "10s", -1,
-                         210, 175, 0);
-
-    // define the size of the canvas - Eg: 20, 27, 200, 140
-    uint32_t canvas_xMin = 20;
-    uint32_t canvas_xRange = 200;
-    uint32_t canvas_yMin = 27;
-    uint32_t canvas_yRange = 140;
-
-    // define a list of integers
-    uint32_t plot_data[10] = {1, 2, 4, 8, 16, 32, 64, 128, 256, 512};
-
-    // iterate through the data and draw a rectangle on the screen
-    uint32_t ui32Idx;
-    tRectangle sRect;
-    GrContextForegroundSet(psContext, ClrGoldenrod);
-    for (ui32Idx = 0; ui32Idx < 10; ui32Idx += 1)
+    tRectangle sRect = {10, 40, 310, 180};
+    if (g_eCurrentPlot == PLOT_LIGHT && g_ui32LightDataCount == 0)
     {
-        // get the value of each element and convert to plotting coordinate
-        float display_y = plot_data[ui32Idx];
-        display_y = canvas_yMin + canvas_yRange - (display_y / yMax) * canvas_yRange;
+        // Draw axes and labels only
 
-        // get the current index, denoting time
-        float display_x = ui32Idx;
-        display_x = (display_x / xMax) * canvas_xRange + canvas_xMin;
-
-        // draw rectangle here
-        sRect.i16XMin = display_x;
-        sRect.i16YMin = display_y - 10;
-        // sRect.i16XMax = GrContextDpyWidthGet(psContext) - 1;
-        sRect.i16XMax = display_x + 10;
-        sRect.i16YMax = display_y;
-        GrContextForegroundSet(psContext, ClrDarkBlue);
+        GrContextForegroundSet(psContext, ClrBlack);
         GrRectFill(psContext, &sRect);
         GrContextForegroundSet(psContext, ClrWhite);
-        GrRectDraw(psContext, &sRect);
+        GrLineDraw(psContext, 10, 175, 310, 175); // X-axis
+        GrLineDraw(psContext, 10, 40, 10, 175);   // Y-axis
+        // GrContextFontSet(psContext, g_psFontFixed6x8);
+        // GrStringDraw(psContext, "Time", -1, 160, 192, false);
+        // GrStringDraw(psContext, "Lux", -1, 4, 30, false);
+    }
+    if (g_eCurrentPlot == PLOT_ACCEL && g_ui32AccelDataCount == 0)
+    {
+        // Draw axes and labels only
+        GrContextForegroundSet(psContext, ClrBlack); // Use black, not pink
+        GrRectFill(psContext, &sRect);
+        GrContextForegroundSet(psContext, ClrWhite); // Use white for axes
+        GrLineDraw(psContext, 10, 175, 310, 175);    // X-axis
+        GrLineDraw(psContext, 10, 40, 10, 175);      // Y-axis
     }
 }
 
@@ -970,18 +1032,39 @@ void OnButtonPress(tWidget *psWidget)
         return;
     }
 
-    // Stop button: dual function
+    // Stop button: only stops the motor if running
     if (psWidget == (tWidget *)&g_sStopButton)
     {
         if (Motor.MotorState == RUNNING)
         {
-            // Enter ESTOP state
-            Motor.MotorState = ESTOP;
-        }
-        else if (Motor.MotorState == ESTOP)
-        {
-            // Acknowledge ESTOP, go to STOP
             Motor.MotorState = STOP;
+            WidgetPaint((tWidget *)&g_sDashboard);
+        }
+        return;
+    }
+    // E-STOP/ACK button logic
+    if (psWidget == (tWidget *)&g_sEStopButton)
+    {
+        if (Motor.MotorState != ESTOP)
+        {
+            // Trigger E-STOP
+            Motor.MotorState = ESTOP;
+            // Change button to ACK (orange, enabled)
+            PushButtonTextSet(&g_sEStopButton, "ACK");
+            PushButtonFillColorSet(&g_sEStopButton, ClrOrange);
+            PushButtonFillOn(&g_sEStopButton);
+            PushButtonTextOn(&g_sEStopButton);
+            WidgetPaint((tWidget *)&g_sEStopButton);
+        }
+        else
+        {
+            // ACK pressed, return to STOP and grey out E-STOP
+            Motor.MotorState = STOP;
+            PushButtonTextSet(&g_sEStopButton, "E-STOP");
+            PushButtonFillColorSet(&g_sEStopButton, ClrGray);
+            PushButtonFillOn(&g_sEStopButton);
+            PushButtonTextOn(&g_sEStopButton);
+            WidgetPaint((tWidget *)&g_sEStopButton);
         }
         WidgetPaint((tWidget *)&g_sDashboard);
         return;
@@ -1071,8 +1154,13 @@ void vCreateDisplayTask(void)
 
 static void prvDisplayTask(void *pvParameters)
 {
+    UARTprintf("Display task started\n");
     tRectangle sRect;
-
+    Motor.MotorState = STOP;
+    struct AMessage xRxedStructure;
+    uint32_t buffer_data[100] = {0};
+    uint32_t data_index = 0;
+    bool plotRawData = false; // Flag to toggle between raw and filtered data
     //
     // Add the title block and the previous and next buttons to the widget
     // tree.
@@ -1080,7 +1168,6 @@ static void prvDisplayTask(void *pvParameters)
     WidgetAdd(WIDGET_ROOT, (tWidget *)&g_sTitle);
     WidgetAdd(WIDGET_ROOT, (tWidget *)&g_sNext);
     WidgetAdd(WIDGET_ROOT, (tWidget *)&g_sPrevious);
-
     //
     // Add the first panel to the widget tree.
     //
@@ -1098,6 +1185,44 @@ static void prvDisplayTask(void *pvParameters)
     //
     for (;;)
     {
+        // Check for event bits
+        EventBits_t uxBits = xEventGroupWaitBits(
+            xEventGroup,
+            EVENT_ESTOP_TRIGGERED | EVENT_HIGH_THRESHOLD | EVENT_LOW_THRESHOLD | EVENT_BTN_TOGGLE,
+            pdTRUE,  // Clear bits after reading
+            pdFALSE, // Wait for any bit
+            0);      // Non-blocking
+
+        if (uxBits & EVENT_HIGH_THRESHOLD)
+        {
+            day = true;
+            // WidgetPaint((tWidget *)&g_sDashboard);
+        }
+
+        if (uxBits & EVENT_LOW_THRESHOLD)
+        {
+            day = false;
+            // WidgetPaint((tWidget *)&g_sDashboard);
+        }
+
+        if (uxBits & EVENT_BTN_TOGGLE)
+        {
+            plotRawData = !plotRawData;
+            UARTprintf("Toggled plot mode: %s\n", plotRawData ? "Raw Data" : "Filtered Data");
+        }
+        
+            if (uxBits & EVENT_ESTOP_TRIGGERED)
+            {
+                Motor.MotorState = ESTOP;
+                // Update E-STOP button appearance as before
+                PushButtonTextSet(&g_sEStopButton, "ACK");
+                PushButtonFillColorSet(&g_sEStopButton, ClrOrange);
+                PushButtonFillOn(&g_sEStopButton);
+                PushButtonTextOn(&g_sEStopButton);
+                WidgetPaint((tWidget *)&g_sEStopButton);
+                WidgetPaint((tWidget *)&g_sDashboard);
+            }
+        
         // block until ISR gives semaphore
         if (xSemaphoreTake(xSemaphoreTimer0, portMAX_DELAY) == pdTRUE)
         {
@@ -1105,6 +1230,7 @@ static void prvDisplayTask(void *pvParameters)
             // Process any messages in the widget message queue.
             //
             WidgetMessageQueueProcess();
+
             if (g_ui32Panel == 0)
             {
                 GrContextForegroundSet(&sContext, ClrBlack);
@@ -1120,16 +1246,179 @@ static void prvDisplayTask(void *pvParameters)
                                      120, 177, 0);
             }
         }
+
+        
+        if (g_ui32Panel == 2 && g_eCurrentPlot == PLOT_LIGHT && g_bLightPlotEnabled)
+        {
+            if (xQueueReceive(xLightQueue, &(xRxedStructure), (TickType_t)10) == pdPASS)
+            {
+                g_ui32LightDataBuffer[g_ui32LightDataIndex] = plotRawData ? xRxedStructure.uRaw : xRxedStructure.uFiltered;
+                g_ui32LightDataIndex = (g_ui32LightDataIndex + 1) % LIGHT_DATA_BUFFER_SIZE;
+                if (g_ui32LightDataCount < LIGHT_DATA_BUFFER_SIZE)
+                    g_ui32LightDataCount++;
+                // print the buffer recieved data
+                // uint32_t prevIndex = (g_ui32LightDataIndex == 0) ? (LIGHT_DATA_BUFFER_SIZE - 1) : (g_ui32LightDataIndex - 1);
+                // UARTprintf("Light Data: %d, Count: %d\n", g_ui32LightDataBuffer[prevIndex], g_ui32LightDataCount);
+                //UARTprintf("%d, %d\n", xRxedStructure.uRaw, xRxedStructure.uFiltered);
+                vSensorData(g_ui32LightDataBuffer, g_ui32LightDataCount, PLOT_LIGHT, plotRawData);
+            }
+            else
+            {
+                // UARTprintf("No Light Data received\n");
+            }
+        }
+        if (g_ui32Panel == 2 && g_eCurrentPlot == PLOT_ACCEL && g_bAccelPlotEnabled)
+        {
+            if (xQueueReceive(xAccelQueue, &xRxedStructure, (TickType_t)10) == pdPASS)
+            {
+                g_ui32AccelDataBuffer[g_ui32AccelDataIndex] = plotRawData ? xRxedStructure.uRaw : xRxedStructure.uFiltered;
+                g_ui32AccelDataIndex = (g_ui32AccelDataIndex + 1) % ACCEL_DATA_BUFFER_SIZE;
+                //uint32_t prevIndex = (g_ui32AccelDataIndex == 0) ? (ACCEL_DATA_BUFFER_SIZE - 1) : (g_ui32AccelDataIndex - 1);
+                UARTprintf("%d, %d\n", xRxedStructure.uRaw, xRxedStructure.uFiltered);
+
+                if (g_ui32AccelDataCount < ACCEL_DATA_BUFFER_SIZE)
+                    g_ui32AccelDataCount++;
+                vSensorData(g_ui32AccelDataBuffer, g_ui32AccelDataCount, PLOT_ACCEL, plotRawData);
+            }
+           
+        }
     }
 }
+static void vSensorData(uint32_t *data, int dataSize, PlotType plotType, bool filtered)
+{
+    // Plot area
+    uint32_t xStart = 10;  // left edge of plot
+    uint32_t yStart = 175; // bottom edge of plot
+    uint32_t yTop = 40;    // top edge of plot
+    uint32_t xStep = 3;    // Distance between points on the X-axis
+    uint32_t plotWidth = 300;
 
+    // Axis scaling and labels
+    uint32_t yMin = 0, yMax = 100, yScale = 1;
+    const char *yLabel = "";
+    const char *xLabel = "Time (s)";
+
+    switch (plotType)
+    {
+    case PLOT_LIGHT:
+        yMin = 0;
+        yMax = 500;
+        yScale = 1; // 1 unit per lux
+        yLabel = "Lux";
+        xStep = 3; // 3 pixels per time unit
+        break;
+    case PLOT_ACCEL:
+        yMin = 0;
+        yMax = 10; 
+        yScale = 1;
+        yLabel = "ms^-2";
+        xStep = 1;
+        break;
+    case PLOT_RPM:
+        yMin = 0;
+        yMax = 5000;
+        yScale = 1;
+        yLabel = "RPM";
+        break;
+    case PLOT_POWER:
+        yMin = 0;
+        yMax = 1000;
+        yScale = 1;
+        yLabel = "mW";
+        break;
+    default:
+        break;
+    }
+    uint32_t maxPoints = plotWidth / xStep;
+
+    if (dataSize >= maxPoints)
+    {
+        // Clear the plotting area
+        tRectangle sRect = {xStart, yTop, xStart + plotWidth, yStart};
+        GrContextForegroundSet(&sContext, ClrBlack);
+        GrRectFill(&sContext, &sRect);
+
+        // Draw the axes
+        GrContextForegroundSet(&sContext, ClrWhite);
+        GrLineDraw(&sContext, xStart, yStart, xStart + plotWidth, yStart); // X-axis
+        GrLineDraw(&sContext, xStart, yTop, xStart, yStart);               // Y-axis
+
+        // Save the latest value
+        uint32_t lastValue = data[dataSize - 1];
+
+        // Reset buffer and index, and add the new value as the first point
+        for (uint32_t i = 0; i < maxPoints; i++)
+            data[i] = 0;
+        data[0] = lastValue;
+        switch (plotType)
+        {
+        case PLOT_LIGHT:
+            g_ui32LightDataIndex = 1;
+            g_ui32LightDataCount = 1;
+            break;
+        case PLOT_ACCEL:
+            g_ui32AccelDataIndex = 1;
+            g_ui32AccelDataCount = 1;
+            break;
+        default:
+            break;
+        }
+        return;
+    }
+
+    // Draw only the new segment
+    if (dataSize > 1)
+    {
+        uint32_t i = dataSize - 1;
+        uint32_t x1 = xStart + (i - 1) * xStep;
+        uint32_t x2 = xStart + i * xStep;
+
+        // Scale and clamp Y values to plot area
+        uint32_t y1 = yStart - ((data[i - 1] - yMin) * (yStart - yTop)) / (yMax - yMin);
+        uint32_t y2 = yStart - ((data[i] - yMin) * (yStart - yTop)) / (yMax - yMin);
+
+        if (y1 < yTop)
+            y1 = yTop;
+        if (y1 > yStart)
+            y1 = yStart;
+        if (y2 < yTop)
+            y2 = yTop;
+        if (y2 > yStart)
+            y2 = yStart;
+
+        if (filtered)
+            GrContextForegroundSet(&sContext, ClrRed);
+        else
+            GrContextForegroundSet(&sContext, ClrBlue);
+        GrLineDraw(&sContext, x1, y1, x2, y2);
+    }
+    // Add labels for the axes
+    GrContextForegroundSet(&sContext, ClrWhite);
+    GrContextFontSet(&sContext, g_psFontFixed6x8);
+    GrStringDraw(&sContext, xLabel, -1, xStart + 125, yStart + 6, false); // X-axis label
+    GrStringDraw(&sContext, yLabel, -1, 20, 33, false);                   // Y-axis label
+    // Draw Y axis min/max labels
+    GrContextFontSet(&sContext, g_psFontFixed6x8);
+    char yMinStr[8], yMaxStr[8];
+    usprintf(yMinStr, "%u", yMin);
+    usprintf(yMaxStr, "%u", yMax);
+    GrContextForegroundSet(&sContext, ClrRed);
+    GrStringDraw(&sContext, yMinStr, -1, xStart - 8, yStart - 8, false);
+    GrStringDraw(&sContext, yMaxStr, -1, xStart - 8, yTop - 15, false);
+    // Draw X axis labels
+    GrStringDraw(&sContext, "20", -1, 305, yStart + 6, false);
+}
 void xTimerHandler(void)
 {
+    static int count = 0;
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     TimerIntClear(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
-    UpdateTime();
+    if (count == 30)
+    {
+        UpdateTime();
+        count = 0;
+    }
+    count++;
     xSemaphoreGiveFromISR(xSemaphoreTimer0, &xHigherPriorityTaskWoken);
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-
 }
-
