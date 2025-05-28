@@ -95,7 +95,6 @@ extern void vCreateMotorTask(void);
 static void prvConfigureHallInts(void);
 static void prvConfigurePIDTimer(void);
 
-
 extern void xTimerHandler(void);
 
 extern void ADC1IntHandler(void);
@@ -106,8 +105,6 @@ static void prvConfigureADCInts(void);
 
 static void prvConfigureADCInts(void);
 static void prvConfigureCurrentTimer(void);
-
-
 
 /*-----------------------------------------------------------*/
 
@@ -258,10 +255,6 @@ int main(void)
     GPIOPinWrite(INLC, GPIO_PIN_5);
     /* Drive forwards */
     GPIOPinWrite(INHC, 0);
-    /* Set-up adc interrupts for current measurements */
-    prvConfigureADCInts();
-    /* Set-up interrupts for hall sensors */
-    prvConfigureHallInts();
 
     xButton2Semaphore = xSemaphoreCreateBinary();
     xIC2MasterSemaphore = xSemaphoreCreateBinary();
@@ -278,6 +271,10 @@ int main(void)
         /* Motor Tasks*/
 
         prvConfigurePIDTimer();
+        /* Set-up adc interrupts for current measurements */
+        prvConfigureADCInts();
+        /* Set-up interrupts for hall sensors */
+        prvConfigureHallInts();
         /* Configure application specific hardware and initialize the task thread. */
         vCreateAccelTask();
         vCreateDisplayTask();

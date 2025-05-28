@@ -499,11 +499,11 @@ static void prvMotorPIDTask(void *parameters)
         if (need_disable)
             disableMotor();
 
-        UARTprintf("RPM: %d, Target: %d, AvgAccel: %d, Ramped Target RPM: %d\n",
-                   (int)rpm,
-                   (int)local_target_rpm,
-                   (int)avg_acceleration,
-                   (int)ramped_target_rpm);
+        // UARTprintf("RPM: %d, Target: %d, AvgAccel: %d, Ramped Target RPM: %d\n",
+        //            (int)rpm,
+        //            (int)local_target_rpm,
+        //            (int)avg_acceleration,
+        //            (int)ramped_target_rpm);
     }
 }
 
