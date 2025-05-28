@@ -122,7 +122,7 @@ static inline float clamp(float value, float min, float max)
 
 #define ADC_CURRENT_FREQ 200
 
-#define ADC_CURRENT_SAMPLES 100.0f /* Number of samples to average for current measurement */
+#define ADC_CURRENT_SAMPLES 10 /* Number of samples to average for current measurement */
 
 #define Motor_INEFFICIENCY 0.6f
 
