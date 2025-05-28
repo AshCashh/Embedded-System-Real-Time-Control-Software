@@ -188,9 +188,9 @@ int main(void)
     {
         taskENTER_CRITICAL();
         /* Configure application specific hardware and initialize the task thread. */
-        vCreateDisplayTask();
-        SysCtlDelay(10000);
-        vCreateLightSensorTask();
+        // vCreateDisplayTask();
+        // SysCtlDelay(10000);
+        // vCreateLightSensorTask();
         vCreateAccelTask();
         /* Start the tasks and timer running. */
         taskEXIT_CRITICAL();

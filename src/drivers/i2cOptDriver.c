@@ -45,6 +45,8 @@ bool waitForAck(uint32_t i2cBase) {
     return true;
 }
 
+
+
 /*
  * Sets slave address to ui8Addr
  * Puts ui8Reg followed by two data bytes in *data and transfers
@@ -110,7 +112,7 @@ bool writeI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
  * Puts ui8Reg followed by two data bytes in *data and transfers
  * over i2c
  */
-bool writeI2Cmul(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint8_t len)
+bool writeI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint8_t len)
 {
     if (len == 0)
         return false;
@@ -228,7 +230,7 @@ bool readI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
     return true;
 }
 
-bool readI2Cmul(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint16_t len)
+bool readI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint16_t len)
 {
     if (len < 1)
         return false;

@@ -945,26 +945,6 @@ void OnIntroPaint(tWidget *psWidget, tContext *psContext)
     dayNightRect.i16YMin = 8;
     dayNightRect.i16XMax = 319 - 8; // 8px padding from right
     dayNightRect.i16YMax = 8 + 24;  // 24px tall
-    if (!day)
-    {
-        // Night: blue box, white text "Night"
-        GrContextForegroundSet(psContext, ClrBlack);
-        GrRectFill(psContext, &dayNightRect);
-        // Draw "Night" at bottom left corner, y decreased by 50
-        GrContextForegroundSet(psContext, ClrBlueViolet);
-        GrContextFontSet(psContext, &g_sFontCm18);
-        GrStringDraw(psContext, "Night", -1, 8, 150, false);
-    }
-    else
-    {
-        // Day: yellow box, grey text "Day"
-        GrContextForegroundSet(psContext, ClrBlack);
-        GrRectFill(psContext, &dayNightRect);
-        // Draw "Day" at bottom left corner, y decreased by 50
-        GrContextForegroundSet(psContext, ClrGoldenrod);
-        GrContextFontSet(psContext, &g_sFontCm18);
-        GrStringDraw(psContext, "Day", -1, 8, 150, false);
-    }
     // display current date below
     GrContextFontSet(&sContext, &g_sFontCm20);
     GrContextForegroundSet(psContext, ClrWhite);

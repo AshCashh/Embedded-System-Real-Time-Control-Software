@@ -180,6 +180,7 @@ BUG LOG:
 */
 static void prvAccelTask(void *pvParameters)
 {
+    vTaskDelay(pdMS_TO_TICKS(1000));
     // UARTprintf("[*] Starting Acceleration Task\n");
     if (!sensorBMI160Init())
     {
@@ -301,15 +302,15 @@ static void prvAccelTask(void *pvParameters)
             {
                 // UARTprintf("Error ACCEL: Failed to send data to the queue\n");
             }
-            // UARTprintf("%d.%d\n", (int)avgAbsAccel,(int)(avgAbsAccel * 100) % 100);
-            // if (counter == 500)
-            // {
-            //     UARTprintf("|%d\n", seconds++);
-            //     // UBaseType_t watermark = uxTaskGetStackHighWaterMark(NULL);
-            //     // UARTprintf("[D] Stack high watermark: %d\n", watermark);
-            //     counter = 0;
-            // }
-            // counter++;
+            UARTprintf("%d.%d\n", (int)avgAbsAccel,(int)(avgAbsAccel * 100) % 100);
+            if (counter == 100)
+            {
+                UARTprintf("|%d\n", seconds++);
+                // UBaseType_t watermark = uxTaskGetStackHighWaterMark(NULL);
+                // UARTprintf("[D] Stack high watermark: %d\n", watermark);
+                counter = 0;
+            }
+            counter++;
 
             // UARTprintf("Filtered Accel: X: %d, Y: %d, Z: %d\n",
             //    (int)(filteredX * 1000),
