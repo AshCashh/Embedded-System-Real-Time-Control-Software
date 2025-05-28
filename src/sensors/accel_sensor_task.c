@@ -285,9 +285,8 @@ static void prvAccelTask(void *pvParameters)
 
             // add to queue (both raw and filtered values)
             xMessage.ulTimeStamp = xTaskGetTickCount();
-            xMessage.uFiltered = (uint32_t)(avgAbsAccel * 100);
-            xMessage.uRaw = (uint32_t)(avgAbsAccel_raw * 100);
-
+            xMessage.uFiltered = (uint32_t)((avgAbsAccel - 0.3f) * 10.0f);
+            xMessage.uRaw = (uint32_t)((avgAbsAccel_raw - 0.3f) * 10.0f);
             xSemaphoreTake(xEmergencyMutex, pdMS_TO_TICKS(100));
             if (xMessage.uFiltered >= accel_threshold) {
                 xSemaphoreGive(xEmergencyStop);
@@ -296,7 +295,7 @@ static void prvAccelTask(void *pvParameters)
             xSemaphoreGive(xEmergencyMutex);
             if (xQueueSend(xAccelQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
             {
-                // UARTprintf("Accel sent: %d\n", xMessage.uRaw);
+                //UARTprintf("Accel sent: %d\n", xMessage.uRaw);
             }
             else
             {
