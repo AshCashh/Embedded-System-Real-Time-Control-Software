@@ -157,7 +157,7 @@ void vCreateMotorTask(void)
                 "MotorPID",
                 configMINIMAL_STACK_SIZE,
                 NULL,
-                tskIDLE_PRIORITY + 2,
+                tskIDLE_PRIORITY + 3,
                 NULL);
     xTaskCreate(prvCurrentReadTask,
                 "CurrentRead",
@@ -310,9 +310,7 @@ static void prvCurrentReadTask(void *pvParameters)
 
 static void prvMotorPIDTask(void *parameters)
 {
-    float rpm_prev = 0.0f;
-    float error_prev = 0.0f;
-    float integral = 0.0f;
+    
 
     /* RPM moving‐average state */
     static float rpm_buffer[MOVING_AVERAGE_SAMPLES] = {0};
@@ -336,6 +334,12 @@ static void prvMotorPIDTask(void *parameters)
     prvMotorStart();
     /* create message var */
     AMessage xMessage;
+    float u;
+    float rpm_prev = 0.0f;
+    float error = 0.0f;
+    float error_prev = 0.0f;
+    float integral = 0.0f;
+    float derivative = 0.0f;
     for (;;)
     {
         if (xSemaphoreTake(xPIDTimerSemaphore, pdMS_TO_TICKS(2000)) != pdTRUE)
@@ -344,10 +348,10 @@ static void prvMotorPIDTask(void *parameters)
         taskENTER_CRITICAL();
 
         /* clear stale data */
-        if ((last_hall_update - xTaskGetTickCount()) > pdMS_TO_TICKS(800))
-        {
-            raw_rpm = 0;
-        }
+        // if ((last_hall_update - xTaskGetTickCount()) > pdMS_TO_TICKS(800))
+        // {
+        //     raw_rpm = 0;
+        // }
         raw_rpm = latest_rpm;
         local_target_rpm = motor_ctrl.target_rpm;
         local_period = motor_ctrl.period_value;
@@ -360,20 +364,22 @@ static void prvMotorPIDTask(void *parameters)
 
         float acceleration = (rpm - rpm_prev) * PID_FREQUENCY;
         rpm_prev = rpm;
-
         accel_sum -= accel_buffer[accel_index];
         accel_buffer[accel_index] = acceleration;
         accel_sum += acceleration;
         accel_index = (accel_index + 1) % MOVING_AVERAGE_SAMPLES;
         float avg_acceleration = accel_sum / (float)MOVING_AVERAGE_SAMPLES;
         /* clamp local target rpm to prevent overshooting acceleration */
-        if ((local_target_rpm - ramped_target_rpm) > max_accel_delta)
+        /* Clamp ramped target to enforce max acceleration relative to actual RPM */
+        float delta_rpm = local_target_rpm - rpm;
+
+        if (delta_rpm > max_accel_delta)
         {
-            ramped_target_rpm += max_accel_delta;
+            ramped_target_rpm = rpm + max_accel_delta;
         }
-        else if ((local_target_rpm - ramped_target_rpm) < -max_decel_delta)
+        else if (delta_rpm < -max_decel_delta)
         {
-            ramped_target_rpm -= max_decel_delta;
+            ramped_target_rpm = rpm - max_decel_delta;
         }
         else
         {
@@ -389,15 +395,17 @@ static void prvMotorPIDTask(void *parameters)
         {
         }
         /* PID loop */
-        float error = ramped_target_rpm - rpm;
-        integral += error * dt;
-        float derivative = (error - error_prev) / dt;
-        error_prev = error;
-        /* Clamp input to PWM duty cycle */
-        float u = clamp(Kp * error + Ki * integral + Kd * derivative, 2.0f, 100.0f);
+        error = ramped_target_rpm - rpm;
+        // if (fabs(ramped_target_rpm - local_target_rpm) < (local_target_rpm * 0.10f)) {setDuty(PWM_TO_DUTY(local_period, u)); continue;} // If the target RPM is within 5% of the local target RPM, skip PID control
+        integral += error * dt; // Integral term
+        derivative = (error - error_prev) / dt; // Derivative term
+        u = Kp * error + Ki * integral + Kd * derivative; // PID control signal
+        error_prev = error; // Update previous error
+        // Clamp the control signal to a valid range
+        u = clamp(u, 2, 100); // Assuming u is a percentage value (0-100%)
         uint32_t local_duty = PWM_TO_DUTY(local_period, u);
 
-        bool need_disable = false;
+        // bool need_disable = false;
         if (xSemaphoreTake(motor_ctrl.mutex, pdMS_TO_TICKS(20)) == pdTRUE)
         {
             motor_ctrl.rpm = rpm;
@@ -407,14 +415,10 @@ static void prvMotorPIDTask(void *parameters)
         }
 
         setDuty(local_duty);
-        if (need_disable)
-            disableMotor();
-
-        // UARTprintf("RPM: %d, Target: %d, AvgAccel: %d, Ramped Target RPM: %d\n",
-        //            (int)rpm,
-        //            (int)local_target_rpm,
-        //            (int)avg_acceleration,
-        //            (int)ramped_target_rpm);
+        // if (need_disable)
+        //     disableMotor();
+        UARTprintf("%d, %d,  %d,  %d,  %d\n",
+                   (int)rpm, (int)local_target_rpm, (int)local_duty, (int)avg_acceleration, (int)error);
     }
 }
 
@@ -442,7 +446,7 @@ void HallSensorHandler(void)
     uint32_t tick_delta = last_hall_update - last_tick;
     last_tick = last_hall_update;
     float minute_delta = TICKS_TO_MINUTES(tick_delta);
-    latest_rpm = 1 / (COUNT_PER_REVOLUTION * minute_delta);
+    if (minute_delta > 0) latest_rpm = 1 / (COUNT_PER_REVOLUTION * minute_delta);
     int tmp[3] = {0, 0, 0};
     getHallSensorValues(tmp);
     updateMotor(tmp[0], tmp[1], tmp[2]);
@@ -484,7 +488,7 @@ void prvMotorStart()
     if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
     {
         motor_ctrl.pwm = 50;
-        motor_ctrl.target_rpm = 1000;
+        motor_ctrl.target_rpm = 2000;
         /* Initialise the motors and set the duty cycle (speed) in microseconds */
         initMotorLib(motor_ctrl.period_value);
         motor_ctrl.duty_value = PWM_TO_DUTY(motor_ctrl.period_value, motor_ctrl.pwm);
