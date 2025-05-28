@@ -170,7 +170,7 @@ void vCreateAccelTask(void)
                 tskIDLE_PRIORITY + 1,
                 NULL);
 }
-
+uint32_t tmp_value = 0;
 /*
 BUG LOG:
 - Not stack overflow (added printf in stackoverflow hook, never occurs)
@@ -284,14 +284,16 @@ static void prvAccelTask(void *pvParameters)
 
             // add to queue (both raw and filtered values)
             xMessage.ulTimeStamp = xTaskGetTickCount();
-            xMessage.uFiltered = (uint32_t)((avgAbsAccel - 0.3f) * 10.0f);
-            xMessage.uRaw = (uint32_t)((avgAbsAccel_raw - 0.3f) * 10.0f);
-            xSemaphoreTake(xEmergencyMutex, pdMS_TO_TICKS(100));
-            if (xMessage.uFiltered >= accel_threshold) {
-                xSemaphoreGive(xEmergencyStop);
-                //UARTprintf("STOP TRIGGERED: %d\n", accel_threshold);
+            xMessage.uFiltered = (uint32_t)((avgAbsAccel - 0.3) * 10);
+            xMessage.uRaw = (uint32_t)((avgAbsAccel_raw - 0.3) * 10);
+            UARTprintf("%d, %d\n", xMessage.uRaw, xMessage.uFiltered);
+            if (xSemaphoreTake(xEmergencyMutex, pdMS_TO_TICKS(10)) == pdTRUE)
+            {
+                if (xMessage.uRaw*7 >= accel_threshold) {
+                    xEventGroupSetBits(xEventGroup, EVENT_ESTOP_TRIGGERED);
+                }
+                xSemaphoreGive(xEmergencyMutex);
             }
-            xSemaphoreGive(xEmergencyMutex);
             if (xQueueSend(xAccelQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
             {
                 //UARTprintf("Accel sent: %d\n", xMessage.uRaw);

@@ -1,5 +1,4 @@
 typedef enum {
-    IDLE,
     RUNNING,
     STOP,
     ESTOP

@@ -13,6 +13,7 @@
 extern QueueHandle_t xPointerQueue;
 
 extern EventGroupHandle_t xEventGroup;
+#define EVENT_ESTOP_TRIGGERED (1 << 4)
 /*
  * Time stamp global variable.
  */

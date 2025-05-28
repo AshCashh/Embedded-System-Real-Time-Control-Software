@@ -331,7 +331,7 @@ tSliderWidget g_psLimitSliders[] = {
                  &g_sFontCm20, "Current Threshold:", 0, 0, OnLimitSliderChange),
     // Acceleration Threshold
     SliderStruct(g_psPanels + 1, 0, 0, &g_sKentec320x240x16_SSD2119,
-                 20, 100, 280, 30, 0, 10, 5, // x, y, width, height, 
+                 20, 100, 280, 30, 0, 25, 10, // x, y, width, height, 
                  (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
                  ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
                  &g_sFontCm20, "Acceleration Threshold:", 0, 0, OnLimitSliderChange),
@@ -366,8 +366,10 @@ void OnLimitSliderChange(tWidget *psWidget, int32_t i32Value)
     }
     else if (psWidget == (tWidget *)&g_psLimitSliders[1])
     {
+        xSemaphoreTake(xEmergencyMutex, pdMS_TO_TICKS(100));
         accel_threshold = i32Value;
-        usprintf(pcText, "Accel: %d ms^-2", i32Value);
+        xSemaphoreGive(xEmergencyMutex);
+        usprintf(pcText, "Acceleration: %d ms^-2", i32Value);
         SliderTextSet(&g_psLimitSliders[1], pcText);
     }
     WidgetPaint(psWidget);
@@ -835,13 +837,6 @@ void OnIntroPaint(tWidget *psWidget, tContext *psContext)
     // Dynamically update STOP and START button label and color
     switch (Motor.MotorState)
     {
-    case IDLE:
-        PushButtonTextSet(&g_sStopButton, "Stop");
-        PushButtonFillColorSet(&g_sStopButton, ClrGray);   // Stop button greyed
-        PushButtonFillColorSet(&g_sStartButton, ClrGreen); // Start button active
-        GrContextForegroundSet(psContext, ClrGray);
-        pcState = "IDLE";
-        break;
     case RUNNING:
         PushButtonFillColorSet(&g_sStartButton, ClrGray); // Start button greyed
         PushButtonTextSet(&g_sStopButton, "Stop");
@@ -1159,9 +1154,9 @@ void vCreateDisplayTask(void)
 
 static void prvDisplayTask(void *pvParameters)
 {
-    // UARTprintf("Display task started\n");
+    UARTprintf("Display task started\n");
     tRectangle sRect;
-
+    Motor.MotorState = STOP;
     struct AMessage xRxedStructure;
     uint32_t buffer_data[100] = {0};
     uint32_t data_index = 0;
@@ -1193,7 +1188,7 @@ static void prvDisplayTask(void *pvParameters)
         // Check for event bits
         EventBits_t uxBits = xEventGroupWaitBits(
             xEventGroup,
-            EVENT_HIGH_THRESHOLD | EVENT_LOW_THRESHOLD | EVENT_BTN_TOGGLE,
+            EVENT_ESTOP_TRIGGERED | EVENT_HIGH_THRESHOLD | EVENT_LOW_THRESHOLD | EVENT_BTN_TOGGLE,
             pdTRUE,  // Clear bits after reading
             pdFALSE, // Wait for any bit
             0);      // Non-blocking
@@ -1215,7 +1210,19 @@ static void prvDisplayTask(void *pvParameters)
             plotRawData = !plotRawData;
             UARTprintf("Toggled plot mode: %s\n", plotRawData ? "Raw Data" : "Filtered Data");
         }
-
+        
+            if (uxBits & EVENT_ESTOP_TRIGGERED)
+            {
+                Motor.MotorState = ESTOP;
+                // Update E-STOP button appearance as before
+                PushButtonTextSet(&g_sEStopButton, "ACK");
+                PushButtonFillColorSet(&g_sEStopButton, ClrOrange);
+                PushButtonFillOn(&g_sEStopButton);
+                PushButtonTextOn(&g_sEStopButton);
+                WidgetPaint((tWidget *)&g_sEStopButton);
+                WidgetPaint((tWidget *)&g_sDashboard);
+            }
+        
         // block until ISR gives semaphore
         if (xSemaphoreTake(xSemaphoreTimer0, portMAX_DELAY) == pdTRUE)
         {
@@ -1239,22 +1246,8 @@ static void prvDisplayTask(void *pvParameters)
                                      120, 177, 0);
             }
         }
-        if (g_ui32Panel == 2)
-        {
-            // Check for emergency stop semaphore (non-blocking)
-            if (xSemaphoreTake(xEmergencyStop, 0) == pdTRUE)
-            {
-                Motor.MotorState = ESTOP;
-                // Update E-STOP button appearance
-                PushButtonTextSet(&g_sEStopButton, "ACK");
-                PushButtonFillColorSet(&g_sEStopButton, ClrOrange);
-                PushButtonFillOn(&g_sEStopButton);
-                PushButtonTextOn(&g_sEStopButton);
-                WidgetPaint((tWidget *)&g_sEStopButton);
-                // Optionally repaint the dashboard to update all state
-                WidgetPaint((tWidget *)&g_sDashboard);
-            }
-        }
+
+        
         if (g_ui32Panel == 2 && g_eCurrentPlot == PLOT_LIGHT && g_bLightPlotEnabled)
         {
             if (xQueueReceive(xLightQueue, &(xRxedStructure), (TickType_t)10) == pdPASS)
@@ -1281,15 +1274,13 @@ static void prvDisplayTask(void *pvParameters)
                 g_ui32AccelDataBuffer[g_ui32AccelDataIndex] = plotRawData ? xRxedStructure.uRaw : xRxedStructure.uFiltered;
                 g_ui32AccelDataIndex = (g_ui32AccelDataIndex + 1) % ACCEL_DATA_BUFFER_SIZE;
                 //uint32_t prevIndex = (g_ui32AccelDataIndex == 0) ? (ACCEL_DATA_BUFFER_SIZE - 1) : (g_ui32AccelDataIndex - 1);
-                //UARTprintf("Accel Data: %d, Count: %d\n", g_ui32AccelDataBuffer[prevIndex], g_ui32AccelDataCount);
+                UARTprintf("%d, %d\n", xRxedStructure.uRaw, xRxedStructure.uFiltered);
+
                 if (g_ui32AccelDataCount < ACCEL_DATA_BUFFER_SIZE)
                     g_ui32AccelDataCount++;
                 vSensorData(g_ui32AccelDataBuffer, g_ui32AccelDataCount, PLOT_ACCEL, plotRawData);
             }
-            else
-            {
-                // UARTprintf("Accel Data2: %d\n", g_ui32AccelDataBuffer[g_ui32AccelDataIndex]);
-            }
+           
         }
     }
 }
