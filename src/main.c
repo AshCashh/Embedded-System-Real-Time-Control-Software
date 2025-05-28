@@ -100,7 +100,7 @@ SemaphoreHandle_t xIC2MasterSemaphore = NULL;
 SemaphoreHandle_t xSampleLightSemaphore = NULL;
 SemaphoreHandle_t xSampleAccelSemaphore = NULL;
 SemaphoreHandle_t xEmergencyStop = NULL;
-
+SemaphoreHandle_t xI2CMutex = NULL;
 SemaphoreHandle_t xI2CMutex = NULL;
 SemaphoreHandle_t xEmergencyMutex = NULL;
 
@@ -181,6 +181,7 @@ int main(void)
     xSampleAccelSemaphore = xSemaphoreCreateBinary();
     xSemaphoreTimer0 = xSemaphoreCreateBinary();
     xEmergencyStop = xSemaphoreCreateBinary();
+    xI2CMutex = xSemaphoreCreateMutex();
     xI2CMutex = xSemaphoreCreateMutex();
     xEmergencyMutex = xSemaphoreCreateMutex();
 

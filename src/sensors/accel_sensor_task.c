@@ -145,7 +145,7 @@ static float filterSumZ = 0;
 int sem_counter = 0;
 
 extern bool bmi160ReadErrorStatus();
-
+extern SemaphoreHandle_t xI2CMutex;
 /*
  * The tasks as described in the comments at the top of this file.
  */
@@ -180,142 +180,156 @@ BUG LOG:
 */
 static void prvAccelTask(void *pvParameters)
 {
+    vTaskDelay(pdMS_TO_TICKS(2000));
     // UARTprintf("[*] Starting Acceleration Task\n");
+    xSemaphoreTake(xI2CMutex, portMAX_DELAY);
     if (!sensorBMI160Init())
     {
         UARTprintf("[!] BMI160 Initilisation Failed\n");
     }
+    xSemaphoreGive(xI2CMutex);
     // UARTprintf("Initialisation Completed\n");
     SysCtlDelay(pdMS_TO_TICKS(200));
 
     // UARTprintf("[*] Running Tests...\n");
-    if (!sensorBMI160Test())
+    xSemaphoreTake(xI2CMutex, portMAX_DELAY);
+    bool success = sensorBMI160Test();
+    xSemaphoreGive(xI2CMutex);
+
+    while (!success)
     {
-        UARTprintf("Test Failed\n");
+        UARTprintf("BMI160 Test Failed, Trying Again\n");
+        xSemaphoreTake(xI2CMutex, portMAX_DELAY);
+        success = sensorBMI160Test();
+        xSemaphoreGive(xI2CMutex);
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 
     uint8_t status = 0;
-    // readI2C_acc(0x69, 0x1B, &status, 1);
+    // readI2Cmul(0x69, 0x1B, &status, 1);
     // UARTprintf("Status: 0x%02X\n", status);
 
-    uint8_t rawData[20];
+    uint8_t rawData[6];
     static uint32_t lastTick = 0;
     static uint32_t sampleCounter = 0;
     struct AMessage xMessage;
     static int counter = 0;
     static int seconds = 0;
+    bool read_success = false;
     while (1)
     {
         if (xSemaphoreTake(xSampleAccelSemaphore, pdMS_TO_TICKS(500)) == pdTRUE)
         {
-            static int failure_count = 0;
 
-            if (!sensorBMI160Read(rawData))
+            // UARTprintf("R\n");
+            xSemaphoreTake(xI2CMutex, portMAX_DELAY);
+            read_success = sensorBMI160Read(rawData);
+            xSemaphoreGive(xI2CMutex);
+            if (!read_success)
             {
                 UARTprintf("[!] Error Reading\n");
-                readI2C_acc(0x69, 0x1B, &status, 1);
+                xSemaphoreTake(xI2CMutex, portMAX_DELAY);
+                readI2Cmul(0x69, 0x1B, &status, 1);
+                xSemaphoreGive(xI2CMutex);
                 UARTprintf("Status: 0x%02X\n", status);
-                uint8_t err;
-                if (bmi160ReadErrorStatus(&err))
-                {
-                    if (err != 0x00)
-                    {
-                        UARTprintf("BMI160 error status: 0x%02X\n", err);
-                    }
-                }
+                // uint8_t err;
+                // if (bmi160ReadErrorStatus(&err))
+                // {
+                //     if (err != 0x00)
+                //     {
+                //         UARTprintf("BMI160 error status: 0x%02X\n", err);
+                //     }
+                // }
                 continue;
             }
             else
             {
-                failure_count = 0;
-            }
-            // uint32_t currentTick = xTaskGetTickCount();
-            // sampleCounter++;
-            // if (sampleCounter >= 100) // Log every 20 samples (~every 200 ms at 100 Hz)
-            // {
-            //     if (lastTick != 0)
-            //     {
-            //         uint32_t delta = currentTick - lastTick;
-            //         float frequency = (1000.0f * sampleCounter) / delta; // ticks in ms
-            //         float avgInterval = (float)delta / sampleCounter;
-            //         UARTprintf("Avg interval: %d ms, approx %d.%d Hz\n", (int)avgInterval, (int)frequency, (int)(frequency * 100) % 100);
-            //         ;
-            //     }
-            //     lastTick = currentTick;
-            //     sampleCounter = 0;
-            // }
+                // uint32_t currentTick = xTaskGetTickCount();
+                // sampleCounter++;
+                // if (sampleCounter >= 100) // Log every 20 samples (~every 200 ms at 100 Hz)
+                // {
+                //     if (lastTick != 0)
+                //     {
+                //         uint32_t delta = currentTick - lastTick;
+                //         float frequency = (1000.0f * sampleCounter) / delta; // ticks in ms
+                //         float avgInterval = (float)delta / sampleCounter;
+                //         UARTprintf("Avg interval: %d ms, approx %d.%d Hz\n", (int)avgInterval, (int)frequency, (int)(frequency * 100) % 100);
+                //         ;
+                //     }
+                //     lastTick = currentTick;
+                //     sampleCounter = 0;
+                // }
 
-            // UARTprintf("RAW: %02X %02X %02X %02X %02X %02X\n", rawData[0], rawData[1], rawData[2], rawData[3], rawData[4], rawData[5]);
-            int16_t acc_x = (int16_t)((rawData[1] << 8) | rawData[0]);
-            int16_t acc_y = (int16_t)((rawData[3] << 8) | rawData[2]);
-            int16_t acc_z = (int16_t)((rawData[5] << 8) | rawData[4]);
+                // UARTprintf("RAW: %02X %02X %02X %02X %02X %02X\n", rawData[0], rawData[1], rawData[2], rawData[3], rawData[4], rawData[5]);
+                int16_t acc_x = (int16_t)((rawData[1] << 8) | rawData[0]);
+                int16_t acc_y = (int16_t)((rawData[3] << 8) | rawData[2]);
+                int16_t acc_z = (int16_t)((rawData[5] << 8) | rawData[4]);
 
-            // UARTprintf("X: %d, Y: %d, X: %d\n", acc_x, acc_y, acc_z);
-            float accelX = acc_x / 16384.0f; // Convert to g
-            float accelY = acc_y / 16384.0f; // Convert to g
-            float accelZ = acc_z / 16384.0f; // Convert to g
-            // float accelX = acc_x / 16384.0f * 9.80665;   // Convert to SI m/s
-            // float accelY = acc_y / 16384.0f * 9.80665;   // Convert to SI m/s
-            // float accelZ = (acc_z / 16384.0f * 9.80665); // Convert to SI m/s and cancel out gravity
+                // UARTprintf("X: %d, Y: %d, X: %d\n", acc_x, acc_y, acc_z);
+                float accelX = acc_x / 16384.0f; // Convert to g
+                float accelY = acc_y / 16384.0f; // Convert to g
+                float accelZ = acc_z / 16384.0f; // Convert to g
+                // float accelX = acc_x / 16384.0f * 9.80665;   // Convert to SI m/s
+                // float accelY = acc_y / 16384.0f * 9.80665;   // Convert to SI m/s
+                // float accelZ = (acc_z / 16384.0f * 9.80665); // Convert to SI m/s and cancel out gravity
 
-            // Update moving average filters
-            filterSumX -= filterBufferX[filterIndex];
-            filterSumY -= filterBufferY[filterIndex];
-            filterSumZ -= filterBufferZ[filterIndex];
+                // Update moving average filters
+                filterSumX -= filterBufferX[filterIndex];
+                filterSumY -= filterBufferY[filterIndex];
+                filterSumZ -= filterBufferZ[filterIndex];
 
-            filterBufferX[filterIndex] = accelX;
-            filterBufferY[filterIndex] = accelY;
-            filterBufferZ[filterIndex] = accelZ;
+                filterBufferX[filterIndex] = accelX;
+                filterBufferY[filterIndex] = accelY;
+                filterBufferZ[filterIndex] = accelZ;
 
-            filterSumX += accelX;
-            filterSumY += accelY;
-            filterSumZ += accelZ;
+                filterSumX += accelX;
+                filterSumY += accelY;
+                filterSumZ += accelZ;
 
-            filterIndex = (filterIndex + 1) % FILTER_SIZE;
+                filterIndex = (filterIndex + 1) % FILTER_SIZE;
 
-            float filteredX = filterSumX / FILTER_SIZE;
-            float filteredY = filterSumY / FILTER_SIZE;
-            float filteredZ = filterSumZ / FILTER_SIZE;
+                float filteredX = filterSumX / FILTER_SIZE;
+                float filteredY = filterSumY / FILTER_SIZE;
+                float filteredZ = filterSumZ / FILTER_SIZE;
 
-            // Calculate average absolute acceleration
-            float avgAbsAccel = (fabs(filteredX) + fabs(filteredY) + fabs(filteredZ)) / 3.0f;
-            float avgAbsAccel_raw = (fabs(accelX) + fabs(accelY) + fabs(accelZ)) / 3.0f;
+                // Calculate average absolute acceleration
+                float avgAbsAccel = (fabs(filteredX) + fabs(filteredY) + fabs(filteredZ)) / 3.0f;
+                float avgAbsAccel_raw = (fabs(accelX) + fabs(accelY) + fabs(accelZ)) / 3.0f;
 
-
-            // add to queue (both raw and filtered values)
-            xMessage.ulTimeStamp = xTaskGetTickCount();
-            xMessage.uFiltered = (uint32_t)((avgAbsAccel - 0.3) * 10);
-            xMessage.uRaw = (uint32_t)((avgAbsAccel_raw - 0.3) * 10);
-            UARTprintf("%d, %d\n", xMessage.uRaw, xMessage.uFiltered);
-            if (xSemaphoreTake(xEmergencyMutex, pdMS_TO_TICKS(10)) == pdTRUE)
-            {
-                if (xMessage.uRaw*7 >= accel_threshold) {
-                    xEventGroupSetBits(xEventGroup, EVENT_ESTOP_TRIGGERED);
+                // add to queue (both raw and filtered values)
+                xMessage.ulTimeStamp = xTaskGetTickCount();
+                xMessage.uFiltered = (uint32_t)((avgAbsAccel - 0.3f) * 10.0f);
+                xMessage.uRaw = (uint32_t)((avgAbsAccel_raw - 0.3f) * 10.0f);
+                if (xSemaphoreTake(xEmergencyMutex, pdMS_TO_TICKS(10)) == pdTRUE)
+                {
+                    if (xMessage.uRaw * 7 >= accel_threshold)
+                    {
+                        xEventGroupSetBits(xEventGroup, EVENT_ESTOP_TRIGGERED);
+                    }
+                    xSemaphoreGive(xEmergencyMutex);
                 }
-                xSemaphoreGive(xEmergencyMutex);
-            }
-            if (xQueueSend(xAccelQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
-            {
-                //UARTprintf("Accel sent: %d\n", xMessage.uRaw);
-            }
-            else
-            {
-                // UARTprintf("Error ACCEL: Failed to send data to the queue\n");
-            }
-            // UARTprintf("%d.%d\n", (int)avgAbsAccel,(int)(avgAbsAccel * 100) % 100);
-            // if (counter == 500)
-            // {
-            //     UARTprintf("|%d\n", seconds++);
-            //     // UBaseType_t watermark = uxTaskGetStackHighWaterMark(NULL);
-            //     // UARTprintf("[D] Stack high watermark: %d\n", watermark);
-            //     counter = 0;
-            // }
-            // counter++;
+                if (xQueueSend(xAccelQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
+                {
+                    // UARTprintf("Accel sent: %d\n", xMessage.uRaw);
+                }
+                else
+                {
+                    // UARTprintf("Error ACCEL: Failed to send data to the queue\n");
+                }
+                if (counter == 100)
+                {
+                    UARTprintf("|%d\n", seconds++);
+                    // UBaseType_t watermark = uxTaskGetStackHighWaterMark(NULL);
+                    // UARTprintf("[D] Stack high watermark: %d\n", watermark);
+                    counter = 0;
+                }
+                counter++;
 
-            // UARTprintf("Filtered Accel: X: %d, Y: %d, Z: %d\n",
-            //    (int)(filteredX * 1000),
-            //    (int)(filteredY * 1000),
-            //    (int)(filteredZ * 1000));
+                // UARTprintf("Filtered Accel: X: %d, Y: %d, Z: %d\n",
+                //    (int)(filteredX * 1000),
+                //    (int)(filteredY * 1000),
+                //    (int)(filteredZ * 1000));
+            }
         }
         else
         {
@@ -332,6 +346,27 @@ void xI2CHandler(void)
     xSemaphoreGiveFromISR(xIC2MasterSemaphore, &xSignalTaskWoken);
 
     portYIELD_FROM_ISR(xSignalTaskWoken);
+}
+
+void xBMI160DataReadyHandler(void)
+{
+    BaseType_t xSignalTaskWoken = pdFALSE;
+    // static uint32_t lastTick = 0;
+    // uint32_t now = xTaskGetTickCount();
+    // UARTprintf("delta=%d\n", now, now - lastTick);
+    // lastTick = now;
+    GPIOIntClear(GPIO_PORTD_BASE, GPIO_PIN_4);
+    xSemaphoreGiveFromISR(xSampleAccelSemaphore, &xSignalTaskWoken);
+    portYIELD_FROM_ISR(xSignalTaskWoken);
+    sem_counter++;
+    // static int counter = 0;
+    // static int sample = 0;
+    // if (counter >= 300)
+    // {
+    //     UARTprintf("A\n");
+    //     counter = 0;
+    // }
+    // counter++;
 }
 
 void xBMI160DataReadyHandler(void)
