@@ -155,7 +155,7 @@ void vCreateMotorTask(void)
 
     xTaskCreate(prvMotorPIDTask,
                 "MotorPID",
-                configMINIMAL_STACK_SIZE,
+                512,
                 NULL,
                 tskIDLE_PRIORITY + 3,
                 NULL);

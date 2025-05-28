@@ -1388,8 +1388,9 @@ static void prvDisplayTask(void *pvParameters)
         {
             if (xQueueReceive(xMotorRPMQueue, &xRxedStructure, (TickType_t)10) == pdPASS)
             {
-                g_ui32RPMDataBuffer[g_ui32RPMDataIndex] = xRxedStructure.uRaw;
+                g_ui32RPMDataBuffer[g_ui32RPMDataIndex] = plotRawData ? xRxedStructure.uRaw : xRxedStructure.uFiltered;
                 g_ui32RPMDataIndex = (g_ui32RPMDataIndex + 1) % RPM_DATA_BUFFER_SIZE;
+                //UARTprintf("%d, %d\n", xRxedStructure.uRaw, xRxedStructure.uFiltered);
                 if (g_ui32RPMDataCount < RPM_DATA_BUFFER_SIZE)
                     g_ui32RPMDataCount++;
                     vSensorData(g_ui32RPMDataBuffer, g_ui32RPMDataCount, PLOT_RPM, plotRawData);
@@ -1402,7 +1403,7 @@ static void prvDisplayTask(void *pvParameters)
         {
             if (xQueueReceive(xPowerQueue, &xRxedStructure, (TickType_t)10) == pdPASS)
             {
-                g_ui32PowerDataBuffer[g_ui32PowerDataIndex] = xRxedStructure.uRaw;
+                g_ui32PowerDataBuffer[g_ui32PowerDataIndex] = plotRawData ? xRxedStructure.uRaw : xRxedStructure.uFiltered;
                 g_ui32PowerDataIndex = (g_ui32PowerDataIndex + 1) % POWER_DATA_BUFFER_SIZE;
                 if (g_ui32PowerDataCount < POWER_DATA_BUFFER_SIZE)
                     g_ui32PowerDataCount++;
@@ -1453,7 +1454,7 @@ static void vSensorData(uint32_t *data, int dataSize, PlotType plotType, bool fi
         break;
     case PLOT_POWER:
         yMin = 0;
-        yMax = 1000;
+        yMax = 15000;
         yScale = 1;
         yLabel = "mW";
         break;
