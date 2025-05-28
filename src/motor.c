@@ -186,17 +186,12 @@ void vCreateMotorTask(void)
 //     IntMasterEnable();
 // }
 
-float convert_val_to_current(uint32_t adc_value)
-{
-    /*
-     * Convert the ADC value to current in mA
-     * Formula: I = (V/2 - 1.65) / (Rshunt × Gain)
-     * where V = adc_value / ADC_MAX_VALUE * VREF
-     */
-    float voltage = (float)(adc_value / ADC_MAX_VALUE) * VREF;
-    float current = (((VREF / 2.f) - voltage) / (GAIN * RSHUNT)); // A
-    return current;
+float estimate_instantaneous_power(float i_a, float i_b) {
+    float i_c = -(i_a + i_b);
+    float i_rms_equiv = sqrtf((i_a*i_a + i_b*i_b + i_c*i_c) / 3.0f);
+    return MOTOR_NORMAL_VOLTAGE * i_rms_equiv;
 }
+
 
 static void prvCurrentReadTask(void *pvParameters)
 {
@@ -330,10 +325,10 @@ static void prvCurrentReadTask(void *pvParameters)
             power0_filtered = (filtered_current1 * MOTOR_NORMAL_VOLTAGE); // in Watts
             power1_filtered = (filtered_current2 * MOTOR_NORMAL_VOLTAGE); // in Watts
             powerE_filtered = (filtered_currentE * MOTOR_NORMAL_VOLTAGE); // in Watts
-            UARTprintf("%d, %d, %d\n", (int)(1000 * filtered_current1), (int)(1000 * filtered_current2), (int)(1000 * filtered_currentE));
+            // UARTprintf("%d, %d, %d\n", (int)(1000 * filtered_current1), (int)(1000 * filtered_current2), (int)(1000 * filtered_currentE));
             power_filtered = (power0_filtered + power1_filtered + powerE_filtered);
-
-            // UARTprintf("%d,%d\n", (int)(power_filtered*1000), (int)(power_raw*1000));
+            float power = estimate_instantaneous_power(filtered_current1, filtered_current2);
+            UARTprintf("%d\n", (int)(power*1000));
             xMessage.uFiltered = (uint32_t)(power_filtered * 1000); // Convert to mA
             xMessage.uRaw = (uint32_t)(power_raw * 1000);           // Convert to mA
             xMessage.ulTimeStamp = xTaskGetTickCount();
