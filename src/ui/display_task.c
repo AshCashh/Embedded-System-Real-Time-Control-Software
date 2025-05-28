@@ -1269,17 +1269,17 @@ static void prvDisplayTask(void *pvParameters)
             UARTprintf("Toggled plot mode: %s\n", plotRawData ? "Raw Data" : "Filtered Data");
         }
         
-            if (uxBits & EVENT_ESTOP_TRIGGERED)
-            {
-                Motor.MotorState = ESTOP;
-                // Update E-STOP button appearance as before
-                PushButtonTextSet(&g_sEStopButton, "ACK");
-                PushButtonFillColorSet(&g_sEStopButton, ClrOrange);
-                PushButtonFillOn(&g_sEStopButton);
-                PushButtonTextOn(&g_sEStopButton);
-                WidgetPaint((tWidget *)&g_sEStopButton);
-                WidgetPaint((tWidget *)&g_sDashboard);
-            }
+        if (g_ui32Panel == 0 && uxBits & EVENT_ESTOP_TRIGGERED)
+        {
+            Motor.MotorState = ESTOP;
+            // Update E-STOP button appearance as before
+            PushButtonTextSet(&g_sEStopButton, "ACK");
+            PushButtonFillColorSet(&g_sEStopButton, ClrOrange);
+            PushButtonFillOn(&g_sEStopButton);
+            PushButtonTextOn(&g_sEStopButton);
+            WidgetPaint((tWidget *)&g_sEStopButton);
+            WidgetPaint((tWidget *)&g_sDashboard);
+        }
         
         // block until ISR gives semaphore
         if (xSemaphoreTake(xSemaphoreTimer0, portMAX_DELAY) == pdTRUE)
