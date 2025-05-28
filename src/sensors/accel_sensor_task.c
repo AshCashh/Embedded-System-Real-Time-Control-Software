@@ -323,7 +323,7 @@ static void prvAccelTask(void *pvParameters)
                 }
                 if (counter == 100)
                 {
-                    UARTprintf("|%d\n", seconds++);
+                    //UARTprintf("|%d\n", seconds++);
                     // UBaseType_t watermark = uxTaskGetStackHighWaterMark(NULL);
                     // UARTprintf("[D] Stack high watermark: %d\n", watermark);
                     counter = 0;

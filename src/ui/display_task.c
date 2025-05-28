@@ -1274,7 +1274,7 @@ static void prvDisplayTask(void *pvParameters)
                 g_ui32AccelDataBuffer[g_ui32AccelDataIndex] = plotRawData ? xRxedStructure.uRaw : xRxedStructure.uFiltered;
                 g_ui32AccelDataIndex = (g_ui32AccelDataIndex + 1) % ACCEL_DATA_BUFFER_SIZE;
                 //uint32_t prevIndex = (g_ui32AccelDataIndex == 0) ? (ACCEL_DATA_BUFFER_SIZE - 1) : (g_ui32AccelDataIndex - 1);
-                UARTprintf("%d, %d\n", xRxedStructure.uRaw, xRxedStructure.uFiltered);
+                //UARTprintf("%d, %d\n", xRxedStructure.uRaw, xRxedStructure.uFiltered);
 
                 if (g_ui32AccelDataCount < ACCEL_DATA_BUFFER_SIZE)
                     g_ui32AccelDataCount++;
