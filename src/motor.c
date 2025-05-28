@@ -105,6 +105,8 @@ QueueHandle_t xMotorTimestampQueue;
 volatile static uint32_t g_pui32ButtonPressed = NULL;
 
 void HallSensorHandler(void);
+
+void ADC1IntHandler(void);
 /*-----------------------------------------------------------*/
 
 /*
@@ -211,9 +213,12 @@ static void prvCurrentReadTask(void *pvParameters)
     float filtered_current0, filtered_current4, filtered_currentE;
 
     float current0_avg, current4_avg, currentE_avg;
+    float current0_calc_error;
     current0_avg = 0.0f;
     current4_avg = 0.0f;
     currentE_avg = 0.0f;
+
+    float power0,power1,powerE;
 
     UARTprintf("Current Read Task Started\n");
 
@@ -223,39 +228,30 @@ static void prvCurrentReadTask(void *pvParameters)
         {
 
             //  UARTprintf("before trigger\n");
-            // Trigger ADC1 conversion
-            ADCProcessorTrigger(ADC1_BASE, 1);
-            // UARTprintf("after trigger\n");
-
-            // Wait until complete
-            // UARTprintf("Waiting for ADC conversion...\n");
-            while (!ADCIntStatus(ADC1_BASE, 1, false))
-            {
-            }
-            // UARTprintf("ADC conversion complete\n");
-            // Clear ADC interrupt flag
-            ADCIntClear(ADC1_BASE, 1);
 
             // Read conversion results
             ADCSequenceDataGet(ADC1_BASE, 1, adcValues);
 
             voltage0 = (float)(adcValues[0] / ADC_MAX_VALUE) * VREF;
             voltage4 = (float)(adcValues[1] / ADC_MAX_VALUE) * VREF;
-            // voltageE = (float)(voltage0 + voltage4) / 2.0f;
+            voltageE = (voltage0 + voltage4) / 2.0f;
 
             // UARTprintf("%d,%d,%d\n", (int)(1000*voltage0), (int)(1000*voltage4),(int)(1000*voltageE));
 
             // // Convert to current: I = (V/2 - 1.65) / (Rshunt × Gain)
-            current0 = ((VREF / 2 - voltage0) / (GAIN * RSHUNT)); // A
-            current4 = ((VREF / 2 - voltage4) / (GAIN * RSHUNT)); // A
+            current0 = (((VREF / 2) - voltage0) / (GAIN * RSHUNT)); // A
+            current4 = (((VREF / 2) - voltage4) / (GAIN * RSHUNT)); // A
+
+            
+            current0_calc_error = (((VREF / 2) - voltage0-0.02f) / (GAIN * RSHUNT));
 
             // // I1 +I2 +I3 = 0 because the motor is a three-phase system
             // // Current E is the estimated 3rd current
             // // I3 = i(I1+I2)
 
-            currentE = -(current0 + current4);
+            currentE = -(current0_calc_error + current4)+Motor_INEFFICIENCY;
 
-            // UARTprintf("%d,%d,%d\n", (int)(current0), (int)(current4), (int)(currentE));
+            // UARTprintf("%d,%d,%d\n", (int)(1000*current0), (int)(1000*current4), (int)(1000*(currentE)));
 
             current0_avg += current0;
             current4_avg += current4;
@@ -266,16 +262,24 @@ static void prvCurrentReadTask(void *pvParameters)
             if (counter >= ADC_CURRENT_SAMPLES)
             {
                 // Calculate the average current
-                filtered_current0 = AMPS_TO_MILLIAMPS((current0_avg /= ADC_CURRENT_SAMPLES));
-                filtered_current4 = AMPS_TO_MILLIAMPS((current4_avg /= ADC_CURRENT_SAMPLES));
-                filtered_currentE = AMPS_TO_MILLIAMPS((currentE_avg /= ADC_CURRENT_SAMPLES));
+                filtered_current0 = AMPS_TO_MILLIAMPS((current0_avg / ADC_CURRENT_SAMPLES));
+                filtered_current4 = AMPS_TO_MILLIAMPS((current4_avg / ADC_CURRENT_SAMPLES));
+                filtered_currentE = AMPS_TO_MILLIAMPS((currentE_avg / ADC_CURRENT_SAMPLES));
                 // print to uart
+
+                power0 = (POWER_CALCULATE(filtered_current0))/1000;
+                power1 = (POWER_CALCULATE(filtered_current4))/1000;
+                powerE = (POWER_CALCULATE(filtered_currentE))/1000; // in mWatts
+                // UARTprintf("%d\n", (int)Power);
                 // UARTprintf("%d,%d,%d\n", (int)filtered_current0, (int)filtered_current4, (int)filtered_currentE);
+                UARTprintf("%d,%d,%d\n", (int)power0, (int)power1, (int)powerE);
                 // Reset the counter and averages
                 counter = 0;
                 current0_avg = 0;
                 current4_avg = 0;
                 currentE_avg = 0;
+
+                
             }
         }
 
@@ -499,11 +503,11 @@ static void prvMotorPIDTask(void *parameters)
         if (need_disable)
             disableMotor();
 
-        UARTprintf("RPM: %d, Target: %d, AvgAccel: %d, Ramped Target RPM: %d\n",
-                   (int)rpm,
-                   (int)local_target_rpm,
-                   (int)avg_acceleration,
-                   (int)ramped_target_rpm);
+        // UARTprintf("RPM: %d, Target: %d, AvgAccel: %d, Ramped Target RPM: %d\n",
+        //            (int)rpm,
+        //            (int)local_target_rpm,
+        //            (int)avg_acceleration,
+        //            (int)ramped_target_rpm);
     }
 }
 
@@ -535,7 +539,7 @@ void HallSensorHandler(void)
     int tmp[3] = {0, 0, 0};
     getHallSensorValues(tmp);
     updateMotor(tmp[0], tmp[1], tmp[2]);
-    xSemaphoreGiveFromISR(xPowerMotorCalcsemaphore, &xMotorTaskWoken);
+    // xSemaphoreGiveFromISR(xPowerMotorCalcsemaphore, &xMotorTaskWoken);
 }
 void xButtonsHandler(void)
 {
@@ -635,4 +639,17 @@ void prvMotorStart()
         // Handle error
         UARTprintf("Failed to take mutex\n");
     }
+}
+
+void ADC1IntHandler(void)
+{
+    /*
+     * ADC1 interrupt handler
+     * This function is called when the ADC1 interrupt is triggered.
+     * It clears the interrupt and updates the motor phase based on the hall sensor values.
+     */
+    // Clear the ADC interrupt
+    ADCIntClear(ADC1_BASE, 1);
+    // Trigger the current read task
+    xSemaphoreGiveFromISR(xPowerMotorCalcsemaphore, NULL);
 }

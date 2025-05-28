@@ -119,13 +119,25 @@ static inline float clamp(float value, float min, float max)
 
 #define ADC_MAX_VALUE 4095.0f /* Maximum ADC value for 12-bit resolution */
 
-#define ADC_CURRENT_SAMPLES 1 /* Number of samples to average for current measurement */
+#define ADC_CURRENT_FREQ 160
+
+#define ADC_CURRENT_SAMPLES 30 /* Number of samples to average for current measurement */
+
+#define Motor_INEFFICIENCY 0.6f
+
+#define MOTOR_NORMAL_VOLTAGE 24.0f /* Normal operating voltage of the motor in volts */
 
 #define AMPS_TO_MILLIAMPS(amps) \
     ((amps) * 1000.0f) /* Convert amps to milliamps for display */
 
+#define C_ABS(X) \
+    ((X) < 0 ? -(X) : (X)) /* Absolute value of a float */
+
 #define Squared(x) \
     (float)((x) * (x)) /* Square a value */
+
+#define POWER_CALCULATE(Current) \
+    (float)((Current) * MOTOR_NORMAL_VOLTAGE)
 
 
 typedef struct AMessage

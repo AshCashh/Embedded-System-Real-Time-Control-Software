@@ -2,46 +2,46 @@
  * hello
  *
  * Copyright (C) 2022 Texas Instruments Incorporated
- * 
- * 
- *  Redistribution and use in source and binary forms, with or without 
- *  modification, are permitted provided that the following conditions 
+ *
+ *
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions
  *  are met:
  *
- *    Redistributions of source code must retain the above copyright 
+ *    Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
  *
  *    Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the 
- *    documentation and/or other materials provided with the   
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the
  *    distribution.
  *
  *    Neither the name of Texas Instruments Incorporated nor the names of
  *    its contributors may be used to endorse or promote products derived
  *    from this software without specific prior written permission.
  *
- *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
- *  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ *  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
  *  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- *  A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
- *  OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
- *  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
+ *  A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ *  OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ *  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
  *  LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
  *  DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- *  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
- *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+ *  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  *  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
-*/
+ */
 
 /******************************************************************************
  *
  * This motor test project provides an example of how to use the motor library
- * with a platformio / freeRTOS project. The main script initialises the hall 
- * sensor interrupt, which run the update_motor function. The program also launches 
+ * with a platformio / freeRTOS project. The main script initialises the hall
+ * sensor interrupt, which run the update_motor function. The program also launches
  * a task that initialises the motors before ramping the speed from 10% to 100%.
  * Once the speed reaches 100%, the motor is stopped and the program ends.
- * 
+ *
  */
 
 /* Standard includes. */
@@ -85,20 +85,24 @@ extern void HallSensorHandler(void);
 uint32_t g_ui32SysClock;
 
 /* Set up the hardware ready to run this demo. */
-static void prvSetupHardware( void );
+static void prvSetupHardware(void);
 
 /* This function sets up UART0 to be used for a console to display information
  * as the example is running. */
 static void prvConfigureUART(void);
 
 /* API to trigger the 'Hello world' task. */
-extern void vCreateMotorTask( void );
+extern void vCreateMotorTask(void);
 
-static void prvConfigureHallInts( void );
+static void prvConfigureHallInts(void);
 
 static void prvConfigurePIDTimer(void);
 
+static void prvConfigureCurrentTimer(void);
+
 extern void xTimerHandler(void);
+
+extern void ADC1IntHandler(void);
 
 extern void xPIDTimerHandler(void);
 
@@ -118,8 +122,8 @@ SemaphoreHandle_t xPowerMotorCalcsemaphore = NULL;
 
 /*-----------------------------------------------------------*/
 
-int main( void )
-{   
+int main(void)
+{
     xButtonSemaphore = xSemaphoreCreateBinary();
     xPIDTimerSemaphore = xSemaphoreCreateBinary();
     xI2CMasterSemaphore = xSemaphoreCreateBinary();
@@ -148,7 +152,8 @@ int main( void )
     there was insufficient FreeRTOS heap memory available for the idle and/or
     timer tasks to be created.  See the memory management section on the
     FreeRTOS web site for more details. */
-    for( ;; );
+    for (;;)
+        ;
 }
 /*-----------------------------------------------------------*/
 static void prvConfigureUART(void)
@@ -182,15 +187,16 @@ static void prvSetupHardware(void)
 {
     /* Run from the PLL at configCPU_CLOCK_HZ MHz. */
     g_ui32SysClock = MAP_SysCtlClockFreqSet((SYSCTL_XTAL_25MHZ |
-            SYSCTL_OSC_MAIN | SYSCTL_USE_PLL |
-            SYSCTL_CFG_VCO_240), configCPU_CLOCK_HZ);
+                                             SYSCTL_OSC_MAIN | SYSCTL_USE_PLL |
+                                             SYSCTL_CFG_VCO_240),
+                                            configCPU_CLOCK_HZ);
 
     /* Configure device pins. */
     PinoutSet(false, false);
 
     /* Configure UART0 to send messages to terminal. */
     prvConfigureUART();
-    
+
     /* Configure motor pins */
     /* Configure ADC1 with ISENCE pins */
     SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC1);
@@ -207,13 +213,14 @@ static void prvSetupHardware(void)
     while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF) ||
            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOG) ||
            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOC) ||
-            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOH) ||
-            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOM) ||
-            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPION) ||
-            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA) ||
-            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOD) ||
-            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOE) ||
-            !SysCtlPeripheralReady(SYSCTL_PERIPH_ADC1));
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOH) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOM) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPION) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOD) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOE) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_ADC1))
+        ;
     /* Configure phase pins as outputs */
     GPIOPinTypeGPIOOutput(INLA);
     GPIOPinTypeGPIOOutput(INHB);
@@ -233,15 +240,14 @@ static void prvSetupHardware(void)
     GPIOPinWrite(INLC, GPIO_PIN_5);
     /* Drive forwards */
     GPIOPinWrite(INHC, 0);
-    /* Set-up interrupts for hall sensors */
-    prvConfigureHallInts();
     /* Set-up adc interrupts for current measurements */
     prvConfigureADCInts();
-
+    /* Set-up interrupts for hall sensors */
+    prvConfigureHallInts();
 }
 /*-----------------------------------------------------------*/
 
-void vApplicationMallocFailedHook( void )
+void vApplicationMallocFailedHook(void)
 {
     /* vApplicationMallocFailedHook() will only be called if
     configUSE_MALLOC_FAILED_HOOK is set to 1 in FreeRTOSConfig.h.  It is a hook
@@ -254,10 +260,11 @@ void vApplicationMallocFailedHook( void )
     to query the size of free heap space that remains (although it does not
     provide information on how the remaining heap might be fragmented). */
     IntMasterDisable();
-    for( ;; );
+    for (;;)
+        ;
 }
 /*-----------------------------------------------------------*/
-static void prvConfigureHallInts( void )
+static void prvConfigureHallInts(void)
 {
 
     /* Configure GPIO ports to trigger an interrupt on rising/falling or both edges. */
@@ -265,18 +272,15 @@ static void prvConfigureHallInts( void )
     GPIOIntTypeSet(
         GPIO_PORTM_BASE,
         GPIO_PIN_3,
-        GPIO_BOTH_EDGES
-    );
+        GPIO_BOTH_EDGES);
     GPIOIntTypeSet(
         GPIO_PORTH_BASE,
         GPIO_PIN_2,
-        GPIO_BOTH_EDGES
-    );
+        GPIO_BOTH_EDGES);
     GPIOIntTypeSet(
         GPIO_PORTN_BASE,
         GPIO_PIN_2,
-        GPIO_BOTH_EDGES
-    );
+        GPIO_BOTH_EDGES);
     /* raise interrupt priority for hallsensorhandler */
     IntPrioritySet(INT_GPIOM, configMAX_SYSCALL_INTERRUPT_PRIORITY);
     IntPrioritySet(INT_GPION, configMAX_SYSCALL_INTERRUPT_PRIORITY);
@@ -291,11 +295,11 @@ static void prvConfigureHallInts( void )
     GPIOIntRegister(GPIO_PORTN_BASE, HallSensorHandler);
     /* Enable pullups */
     GPIOPadConfigSet(HALLA,
-        GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+                     GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
     GPIOPadConfigSet(HALLB,
-        GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+                     GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
     GPIOPadConfigSet(HALLC,
-        GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+                     GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
     /* Int priority maximum */
     IntPrioritySet(INT_GPIOM, configMAX_SYSCALL_INTERRUPT_PRIORITY);
     IntPrioritySet(INT_GPION, configMAX_SYSCALL_INTERRUPT_PRIORITY);
@@ -305,8 +309,6 @@ static void prvConfigureHallInts( void )
     GPIOIntClear(HALLB);
     GPIOIntClear(HALLC);
 
-
-
     /* Enable global interrupts in the NVIC. */
     IntMasterEnable();
 }
@@ -314,36 +316,65 @@ static void prvConfigureHallInts( void )
 static void prvConfigureADCInts(void)
 {
     /* Configure ADC1 to trigger an interrupt on conversion complete. */
+    UARTprintf("Configuring ADC1 interrupts\n");
     SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC1);
     while (!SysCtlPeripheralReady(SYSCTL_PERIPH_ADC1))
     {
         // Wait for ADC1 to be ready
     }
     // Configure GPIOE pins as analog inputs
-    //ain0 = PE3, ain1 = PD7
+    // ain0 = PE3, ain1 = PD7
     GPIOPinTypeADC(GPIO_PORTE_BASE, GPIO_PIN_3);
     GPIOPinTypeADC(GPIO_PORTD_BASE, GPIO_PIN_7);
 
+    // Disable the sequencer before configuration
+    ADCSequenceDisable(ADC1_BASE, 1);
+
     // Configure ADC1 Sequencer 1 (SS1) with processor trigger
-    ADCSequenceConfigure(ADC1_BASE, 1, ADC_TRIGGER_PROCESSOR, 0);
+    ADCSequenceConfigure(ADC1_BASE, 1, ADC_TRIGGER_TIMER, 0);
 
     // Step 0: AIN0 (PE3)
     ADCSequenceStepConfigure(ADC1_BASE, 1, 0, ADC_CTL_CH0);
     // Step 1: AIN4 (PE7), with IE and END
     ADCSequenceStepConfigure(ADC1_BASE, 1, 1, ADC_CTL_CH4 | ADC_CTL_IE | ADC_CTL_END);
 
-    // Enable the sequencer and clear interrupt
     ADCSequenceEnable(ADC1_BASE, 1);
     ADCIntClear(ADC1_BASE, 1);
+    ADCIntRegister(ADC1_BASE, 1, ADC1IntHandler);
+    ADCIntEnable(ADC1_BASE, 1);
+    IntEnable(INT_ADC1SS1);
+
+    UARTprintf("ADC1 interrupts configured\n");
+    // Configure and start Timer3A
+    prvConfigureCurrentTimer();
+    UARTprintf("timer3 interrupts configured\n");
 }
 
+static void prvConfigureCurrentTimer(void)
+{
+    /* Use Timer 3A in full width periodic mode at 160hz */
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER3);
+
+    /* configure to be periodic*/
+    TimerConfigure(TIMER3_BASE, TIMER_CFG_PERIODIC);
+    TimerLoadSet(TIMER3_BASE, TIMER_A, (g_ui32SysClock / ADC_CURRENT_FREQ)); // 6.25 ms
+
+    /* Configure the Timer 3A interrupt for timeout. */
+    TimerIntEnable(TIMER3_BASE, TIMER_TIMA_TIMEOUT);
+
+    // Configure Timer0A to trigger ADC at timeout
+    TimerControlTrigger(TIMER3_BASE, TIMER_A, true);
+
+    // Enable the timer
+    TimerEnable(TIMER3_BASE, TIMER_A);
+}
 
 static void prvConfigurePIDTimer(void)
 {
     /* Use Timer 2A in full width periodic mode at 100hz */
     SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER2);
     TimerConfigure(TIMER2_BASE, TIMER_CFG_PERIODIC);
-    TimerLoadSet(TIMER2_BASE, TIMER_A, (g_ui32SysClock/PID_FREQUENCY)); // 10 ms
+    TimerLoadSet(TIMER2_BASE, TIMER_A, (g_ui32SysClock / PID_FREQUENCY)); // 10 ms
     /* Configure the Timer 2A interrupt for timeout. */
     TimerIntEnable(TIMER2_BASE, TIMER_TIMA_TIMEOUT);
     /* Enable the Timer 2A interrupt in the NVIC. */
@@ -356,7 +387,7 @@ static void prvConfigurePIDTimer(void)
     TimerEnable(TIMER2_BASE, TIMER_A);
 }
 
-void vApplicationIdleHook( void )
+void vApplicationIdleHook(void)
 {
     /* vApplicationIdleHook() will only be called if configUSE_IDLE_HOOK is set
     to 1 in FreeRTOSConfig.h.  It will be called on each iteration of the idle
@@ -370,24 +401,26 @@ void vApplicationIdleHook( void )
 }
 /*-----------------------------------------------------------*/
 
-void vApplicationStackOverflowHook( TaskHandle_t pxTask, char *pcTaskName )
+void vApplicationStackOverflowHook(TaskHandle_t pxTask, char *pcTaskName)
 {
-    ( void ) pcTaskName;
-    ( void ) pxTask;
+    (void)pcTaskName;
+    (void)pxTask;
 
     /* Run time stack overflow checking is performed if
     configCHECK_FOR_STACK_OVERFLOW is defined to 1 or 2.  This hook
     function is called if a stack overflow is detected. */
     IntMasterDisable();
-    for( ;; );
+    for (;;)
+        ;
 }
 /*-----------------------------------------------------------*/
 
-void *malloc( size_t xSize )
+void *malloc(size_t xSize)
 {
     /* There should not be a heap defined, so trap any attempts to call
     malloc. */
     IntMasterDisable();
-    for( ;; );
+    for (;;)
+        ;
 }
 /*-----------------------------------------------------------*/
