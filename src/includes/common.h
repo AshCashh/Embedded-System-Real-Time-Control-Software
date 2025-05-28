@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include "FreeRTOS.h"
 #include "task.h"
+#include "event_groups.h"
 #include "semphr.h"
 /*
  * Queue used to send and receive complete struct AMessage structures.

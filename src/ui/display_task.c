@@ -37,7 +37,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
-
+#include "variables.h"
 /* Kernel includes. */
 #include "FreeRTOS.h"
 #include "task.h"
@@ -81,8 +81,13 @@
 #include "includes/accel_sensor_task.h"
 #include "includes/shared_variables.h"
 #include "includes/display_task.h"
+#include "motorlib.h"
 /*-----------------------------------------------------------*/
 #include <stdbool.h>
+
+extern QueueHandle_t xMotorRPMQueue;
+extern motorcontrol_t motor_ctrl;
+
 #define RPM_MIN 0
 #define RPM_MAX 5000
 extern uint32_t accel_threshold;
@@ -115,7 +120,17 @@ uint32_t g_ui32AccelDataIndex = 0;
 
 bool day = false;
 uint32_t g_ui32LightDataCount = 0;
+#define RPM_DATA_BUFFER_SIZE 100
+uint32_t g_ui32RPMDataBuffer[RPM_DATA_BUFFER_SIZE] = {0};
+uint32_t g_ui32RPMDataIndex = 0;
+#define POWER_DATA_BUFFER_SIZE 100
+uint32_t g_ui32PowerDataBuffer[POWER_DATA_BUFFER_SIZE] = {0};
+uint32_t g_ui32PowerDataIndex = 0;
+
+
 uint32_t g_ui32AccelDataCount = 0;
+uint32_t g_ui32RPMDataCount = 0;
+uint32_t g_ui32PowerDataCount = 0;
 
 extern tCanvasWidget g_sCanvas3;
 extern tCanvasWidget g_sCanvas1;
@@ -127,6 +142,7 @@ extern tCanvasWidget g_sCanvas1;
 uint32_t g_ui32SysClock;
 tContext sContext;
 Motor_t Motor;
+
 uint32_t luxValue = 10;
 
 // timer
@@ -142,6 +158,8 @@ char time_string[MAX_TIME_LENGTH];
 char date[MAX_DATE_LENGTH];
 volatile bool g_bLightPlotEnabled = false;
 volatile bool g_bAccelPlotEnabled = false;
+volatile bool g_bRPMPlotEnabled = false;
+volatile bool g_bPowerPlotEnabled = false;
 //*****************************************************************************
 //
 // The DMA control structure table.
@@ -287,7 +305,13 @@ OnRpmChange(tWidget *psWidget, int32_t i32Value)
     static char pcText[5];
 
     // 1) Apply to your motor data
-    Motor.desired_rpm = i32Value;
+    // Motor.desired_rpm = i32Value;
+    if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
+    {
+        motor_ctrl.target_rpm = (float)i32Value;
+        Motor.desired_rpm = i32Value;
+        xSemaphoreGive(motor_ctrl.mutex);
+    }
 
     // 2) Update the slider label
     usprintf(pcText, "%3d", i32Value);
@@ -586,7 +610,21 @@ void OnPlotSelectButton(tWidget *psWidget)
     {
         g_eCurrentPlot = PLOT_RPM;
         PushButtonFillColorSet(&g_sPlotBtnRPM, ClrYellow);
-        // (reset rpm buffer here if you add it)
+        // Reset the buffer and index for new plot
+        for (uint32_t i = 0; i < RPM_DATA_BUFFER_SIZE; i++)
+            g_ui32RPMDataBuffer[i] = 0;
+        g_ui32RPMDataIndex = 0;
+        // Reset the RPM data count
+        g_ui32RPMDataCount = 0;
+        g_bRPMPlotEnabled = true; // Enable plotting for RPM
+        // Draw axes and labels immediately
+        tRectangle sRect = {10, 40, 310, 180};
+        GrContextForegroundSet(&sContext, ClrBlack);
+        GrRectFill(&sContext, &sRect);
+        GrContextForegroundSet(&sContext, ClrWhite);
+        GrLineDraw(&sContext, 10, 180, 310, 180); // X-axis
+        GrLineDraw(&sContext, 10, 40, 10, 180);   // Y-axis
+        
     }
     else if (psWidget == (tWidget *)&g_sPlotBtnPower)
     {
@@ -1029,7 +1067,6 @@ void OnButtonPress(tWidget *psWidget)
             Motor.MotorState = RUNNING;
             WidgetPaint((tWidget *)&g_sDashboard);
         }
-        return;
     }
 
     // Stop button: only stops the motor if running
@@ -1040,7 +1077,6 @@ void OnButtonPress(tWidget *psWidget)
             Motor.MotorState = STOP;
             WidgetPaint((tWidget *)&g_sDashboard);
         }
-        return;
     }
     // E-STOP/ACK button logic
     if (psWidget == (tWidget *)&g_sEStopButton)
@@ -1067,6 +1103,28 @@ void OnButtonPress(tWidget *psWidget)
             WidgetPaint((tWidget *)&g_sEStopButton);
         }
         WidgetPaint((tWidget *)&g_sDashboard);
+    }
+    /* update motor control */
+    if (xSemaphoreTake(motor_ctrl.mutex, pdMS_TO_TICKS(100)) == pdTRUE)
+    {
+        switch (Motor.MotorState)
+        {
+            case ESTOP:
+                motor_ctrl.Estop = true; // Set E-Stop flag
+                motor_ctrl.motor_enabled = false; // Disable motor
+                break;
+            case STOP:
+                motor_ctrl.Estop = false; // Clear E-Stop flag
+                motor_ctrl.motor_enabled = false; // Disable motor
+                break;
+            case RUNNING:
+                motor_ctrl.Estop = false; // Clear E-Stop flag
+                motor_ctrl.motor_enabled = true; // Enable motor
+                break;
+            default:
+                break;
+        }
+        xSemaphoreGive(motor_ctrl.mutex);
         return;
     }
     // Handle push buttons on the second panel as before
@@ -1282,6 +1340,20 @@ static void prvDisplayTask(void *pvParameters)
             }
            
         }
+        if (g_ui32Panel == 2 && g_eCurrentPlot == PLOT_RPM && g_bRPMPlotEnabled)
+        {
+            if (xQueueReceive(xMotorRPMQueue, &xRxedStructure, (TickType_t)10) == pdPASS)
+            {
+                g_ui32RPMDataBuffer[g_ui32RPMDataIndex] = xRxedStructure.uRaw;
+                g_ui32RPMDataIndex = (g_ui32RPMDataIndex + 1) % RPM_DATA_BUFFER_SIZE;
+                if (g_ui32RPMDataCount < RPM_DATA_BUFFER_SIZE)
+                    g_ui32RPMDataCount++;
+                    vSensorData(g_ui32RPMDataBuffer, g_ui32RPMDataCount, PLOT_RPM, plotRawData);
+            }
+            else{
+                //UARTprintf("No RPM Data received\n");
+            }
+        }
     }
 }
 static void vSensorData(uint32_t *data, int dataSize, PlotType plotType, bool filtered)
@@ -1359,6 +1431,10 @@ static void vSensorData(uint32_t *data, int dataSize, PlotType plotType, bool fi
         case PLOT_ACCEL:
             g_ui32AccelDataIndex = 1;
             g_ui32AccelDataCount = 1;
+            break;
+        case PLOT_RPM:
+            g_ui32RPMDataIndex = 1;
+            g_ui32RPMDataCount = 1;
             break;
         default:
             break;

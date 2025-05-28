@@ -15,6 +15,24 @@ extern "C" {
 // #include <xdc/runtime/Error.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include "driverlib/pwm.h"
+#include "driverlib/sysctl.h"
+#include "driverlib/gpio.h"
+#include "driverlib/adc.h"
+#include "driverlib/pin_map.h"
+#include "inc/hw_memmap.h"
+#include "variables.h"
+/*!
+    *  @brief  measures hall sensor lines to get current phase / values
+    *
+    *  @param halls array of hall sensor values
+    * 
+    *  @pre    motor library has been initialized using initMotorLib() and duty cycle as been set
+    * 
+    *  @returns hall_a, hall_b, hall_c
+*/
+bool getHallSensorValues(int32_t* halls);
+
 
 /*!
  *  @brief  This function sets the duty cycle of the high side PWM lines.
@@ -27,7 +45,7 @@ extern "C" {
  *                Valid values for duty are 0 - PWMStruct.MaxDuty
  *
  */
-void setDuty(uint16_t duty);
+void setDuty(float duty);
 
 /*!
  *  @brief  Main function which Commutates the motor phases A,B,C to the correct values based on the Hall sensor input.
@@ -99,10 +117,16 @@ bool initMotorLib(uint16_t pwm_period);
  */
 uint16_t getMotorPWMPeriod();
 
+/*!
+ * @brief getter function for current from hall lines
+*/
+void getHallCurrents(int32_t* halls);
+
+void printMotorStatus(motorcontrol_t* motor_ctrl);
+
+
 #ifdef __cplusplus
 }
 #endif
 
 #endif /* MOTORLIB_H_ */
-
-
