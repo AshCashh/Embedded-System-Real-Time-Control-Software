@@ -91,12 +91,14 @@
 #include <motorlib.h>
 motorcontrol_t motor_ctrl;
 extern void HallSensorHandler(void);
-extern void vCreateMotorTask( void );
-static void prvConfigureHallInts( void );
+extern void vCreateMotorTask(void);
+static void prvConfigureHallInts(void);
 static void prvConfigurePIDTimer(void);
 extern void xPIDTimerHandler(void);
 
 static void prvConfigureADCInts(void);
+static void prvConfigureCurrentTimer(void);
+/*-----------------------------------------------------------*/
 
 SemaphoreHandle_t xPIDTimerSemaphore = NULL;
 SemaphoreHandle_t xCountMutex = NULL;
@@ -200,10 +202,9 @@ int main(void)
     motor_ctrl.period_value = 50;
     motor_ctrl.duty_value = PWM_TO_DUTY(motor_ctrl.period_value, motor_ctrl.pwm);
     motor_ctrl.brake = false;
-    
 
     // MOTOR
-     /* Configure motor pins */
+    /* Configure motor pins */
     /* Configure ADC1 with ISENCE pins */
     SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC1);
     /* Enable GPIO ports for motor phases */
@@ -219,13 +220,14 @@ int main(void)
     while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF) ||
            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOG) ||
            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOC) ||
-            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOH) ||
-            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOM) ||
-            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPION) ||
-            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA) ||
-            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOD) ||
-            !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOE) ||
-            !SysCtlPeripheralReady(SYSCTL_PERIPH_ADC1));
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOH) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOM) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPION) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOD) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOE) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_ADC1))
+        ;
     /* Configure phase pins as outputs */
     GPIOPinTypeGPIOOutput(INLA);
     GPIOPinTypeGPIOOutput(INHB);
@@ -245,10 +247,10 @@ int main(void)
     GPIOPinWrite(INLC, GPIO_PIN_5);
     /* Drive forwards */
     GPIOPinWrite(INHC, 0);
-    /* Set-up interrupts for hall sensors */
-    prvConfigureHallInts();
     /* Set-up adc interrupts for current measurements */
     prvConfigureADCInts();
+    /* Set-up interrupts for hall sensors */
+    prvConfigureHallInts();
 
     xButton2Semaphore = xSemaphoreCreateBinary();
     xIC2MasterSemaphore = xSemaphoreCreateBinary();
@@ -263,7 +265,7 @@ int main(void)
     {
         taskENTER_CRITICAL();
         /* Motor Tasks*/
-        
+
         prvConfigurePIDTimer();
         /* Configure application specific hardware and initialize the task thread. */
         vCreateAccelTask();
@@ -403,7 +405,7 @@ static void prvConfigureI2C(void)
     GPIOPinTypeI2CSCL(GPIO_PORTN_BASE, GPIO_PIN_5);
     GPIOPinTypeI2C(GPIO_PORTN_BASE, GPIO_PIN_4);
 
-    // pull-up 
+    // pull-up
     GPIOPadConfigSet(GPIO_PORTN_BASE, GPIO_PIN_4 | GPIO_PIN_5,
                      GPIO_STRENGTH_4MA, GPIO_PIN_TYPE_STD_WPU);
 
@@ -478,7 +480,7 @@ static void prvDisplayInit(void)
 
 static void prvSetupHardware(void)
 {
-    
+
     /* Run from the PLL at configCPU_CLOCK_HZ MHz. */
     g_ui32SysClock = MAP_SysCtlClockFreqSet((SYSCTL_XTAL_25MHZ |
                                              SYSCTL_OSC_MAIN | SYSCTL_USE_PLL |
@@ -494,10 +496,9 @@ static void prvSetupHardware(void)
     // prvConfigSMBusINT();
     // prvConfigureHWTimer();
     prvConfigureHWTimer(); // timer 0 A
-
 }
 /*-----------------------------------------------------------*/
-static void prvConfigureHallInts( void )
+static void prvConfigureHallInts(void)
 {
 
     /* Configure GPIO ports to trigger an interrupt on rising/falling or both edges. */
@@ -505,18 +506,15 @@ static void prvConfigureHallInts( void )
     GPIOIntTypeSet(
         GPIO_PORTM_BASE,
         GPIO_PIN_3,
-        GPIO_BOTH_EDGES
-    );
+        GPIO_BOTH_EDGES);
     GPIOIntTypeSet(
         GPIO_PORTH_BASE,
         GPIO_PIN_2,
-        GPIO_BOTH_EDGES
-    );
+        GPIO_BOTH_EDGES);
     GPIOIntTypeSet(
         GPIO_PORTN_BASE,
         GPIO_PIN_2,
-        GPIO_BOTH_EDGES
-    );
+        GPIO_BOTH_EDGES);
     /* raise interrupt priority for hallsensorhandler */
     IntPrioritySet(INT_GPIOM, configMAX_SYSCALL_INTERRUPT_PRIORITY);
     IntPrioritySet(INT_GPION, configMAX_SYSCALL_INTERRUPT_PRIORITY);
@@ -531,11 +529,11 @@ static void prvConfigureHallInts( void )
     GPIOIntRegister(GPIO_PORTN_BASE, HallSensorHandler);
     /* Enable pullups */
     GPIOPadConfigSet(HALLA,
-        GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+                     GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
     GPIOPadConfigSet(HALLB,
-        GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+                     GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
     GPIOPadConfigSet(HALLC,
-        GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+                     GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
     /* Int priority maximum */
     IntPrioritySet(INT_GPIOM, configMAX_SYSCALL_INTERRUPT_PRIORITY);
     IntPrioritySet(INT_GPION, configMAX_SYSCALL_INTERRUPT_PRIORITY);
@@ -545,42 +543,70 @@ static void prvConfigureHallInts( void )
     GPIOIntClear(HALLB);
     GPIOIntClear(HALLC);
 
-
-
     /* Enable global interrupts in the NVIC. */
     IntMasterEnable();
 }
 static void prvConfigureADCInts(void)
 {
     /* Configure ADC1 to trigger an interrupt on conversion complete. */
+    UARTprintf("Configuring ADC1 interrupts\n");
     SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC1);
     while (!SysCtlPeripheralReady(SYSCTL_PERIPH_ADC1))
     {
         // Wait for ADC1 to be ready
     }
     // Configure GPIOE pins as analog inputs
-    //ain0 = PE3, ain1 = PD7
+    // ain0 = PE3, ain1 = PD7
     GPIOPinTypeADC(GPIO_PORTE_BASE, GPIO_PIN_3);
     GPIOPinTypeADC(GPIO_PORTD_BASE, GPIO_PIN_7);
 
+    // Disable the sequencer before configuration
+    ADCSequenceDisable(ADC1_BASE, 1);
+
     // Configure ADC1 Sequencer 1 (SS1) with processor trigger
-    ADCSequenceConfigure(ADC1_BASE, 1, ADC_TRIGGER_PROCESSOR, 0);
+    ADCSequenceConfigure(ADC1_BASE, 1, ADC_TRIGGER_TIMER, 0);
 
     // Step 0: AIN0 (PE3)
     ADCSequenceStepConfigure(ADC1_BASE, 1, 0, ADC_CTL_CH0);
     // Step 1: AIN4 (PE7), with IE and END
     ADCSequenceStepConfigure(ADC1_BASE, 1, 1, ADC_CTL_CH4 | ADC_CTL_IE | ADC_CTL_END);
 
-    // Enable the sequencer and clear interrupt
     ADCSequenceEnable(ADC1_BASE, 1);
     ADCIntClear(ADC1_BASE, 1);
+    ADCIntRegister(ADC1_BASE, 1, ADC1IntHandler);
+    ADCIntEnable(ADC1_BASE, 1);
+    IntEnable(INT_ADC1SS1);
+
+    UARTprintf("ADC1 interrupts configured\n");
+    // Configure and start Timer3A
+    prvConfigureCurrentTimer();
+    UARTprintf("timer3 interrupts configured\n");
+}
+
+static void prvConfigureCurrentTimer(void)
+{
+    /* Use Timer 3A in full width periodic mode at 160hz */
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER3);
+
+    /* configure to be periodic*/
+    TimerConfigure(TIMER3_BASE, TIMER_CFG_PERIODIC);
+    TimerLoadSet(TIMER3_BASE, TIMER_A, (g_ui32SysClock / ADC_CURRENT_FREQ)); // 6.25 ms
+
+    /* Configure the Timer 3A interrupt for timeout. */
+    TimerIntEnable(TIMER3_BASE, TIMER_TIMA_TIMEOUT);
+
+    // Configure Timer0A to trigger ADC at timeout
+    TimerControlTrigger(TIMER3_BASE, TIMER_A, true);
+
+    // Enable the timer
+    TimerEnable(TIMER3_BASE, TIMER_A);
 }
 static void prvConfigurePIDTimer(void)
 {
     /* Use Timer 2A in full width periodic mode at 100hz */
     SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER2);
     TimerConfigure(TIMER2_BASE, TIMER_CFG_PERIODIC);
-    TimerLoadSet(TIMER2_BASE, TIMER_A, (g_ui32SysClock/PID_FREQUENCY)); // 10 ms
+    TimerLoadSet(TIMER2_BASE, TIMER_A, (g_ui32SysClock / PID_FREQUENCY)); // 10 ms
     /* Configure the Timer 2A interrupt for timeout. */
     TimerIntEnable(TIMER2_BASE, TIMER_TIMA_TIMEOUT);
     /* Enable the Timer 2A interrupt in the NVIC. */
