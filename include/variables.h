@@ -54,7 +54,6 @@
 
 #define TICKS_TO_MINUTES(t) ( ((float)(t) / (float)configTICK_RATE_HZ) / 60.0f )
 
-#define QUEUE_LENGTH 300
 
 #define PID_FREQUENCY 120   //Hz
 
@@ -142,14 +141,6 @@ static inline float clamp(float value, float min, float max)
     (float)((Current) * MOTOR_NORMAL_VOLTAGE)
 
 
-typedef struct AMessage
-{
-    uint32_t ulTimeStamp;
-    uint32_t uRaw;
-    uint32_t uFiltered;
-} AMessage;
-
-
 /* Data types for motor configuration and control */
 /*
     * @brief Motor control data struct
@@ -163,7 +154,7 @@ typedef struct
     uint32_t hall_currents[3]; /* hall sensor currents */
     bool motor_enabled; /* stall prevention flag */
     bool brake; /* brake flag */
-    bool estop; /* emergency stop flag */
+    bool Estop; /* emergency stop flag */
     uint8_t stall_counter; /* reactivation count */
     float rpm; /* current rpm value */
     float target_rpm; /* target rpm value */

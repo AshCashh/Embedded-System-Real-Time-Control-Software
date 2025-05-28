@@ -130,5 +130,3 @@ void printMotorStatus(motorcontrol_t* motor_ctrl);
 #endif
 
 #endif /* MOTORLIB_H_ */
-
-
