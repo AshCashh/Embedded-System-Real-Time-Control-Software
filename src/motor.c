@@ -205,7 +205,7 @@ static void prvCurrentReadTask(void *pvParameters)
     float power0,power1,powerE;
     float power_raw0, power_raw1, power_rawE;
 
-    UARTprintf("Current Read Task Started\n");
+    // UARTprintf("Current Read Task Started\n");
     AMessage xMessage;
     
     for (;;)
@@ -305,7 +305,7 @@ static void prvMotorPIDTask(void *parameters)
     /* RPM limit vars */
     const float max_accel_delta = (MAX_ACCELERATION_RPMS * dt);
     /* consider only regular deceleration for now */
-    const float max_decel_delta = (MAX_DECELERATION_RPMS * dt);
+    float max_decel_delta = (MAX_DECELERATION_RPMS * dt);
     float raw_rpm = 0;
     float local_target_rpm;
     uint32_t local_period;
@@ -333,6 +333,16 @@ static void prvMotorPIDTask(void *parameters)
         raw_rpm = latest_rpm;
         local_target_rpm = motor_ctrl.target_rpm;
         local_period = motor_ctrl.period_value;
+        /* don't accumulate error if in stop state */
+        if (!motor_ctrl.motor_enabled) {
+            local_target_rpm = 0.0f;
+        } else {
+            enableMotor();
+        }
+        /* if estop set deceleration rate to be estop */
+        if (motor_ctrl.Estop) {
+            max_decel_delta = (ESTOP_DECELERATION_RPMS * dt);
+        }
         taskEXIT_CRITICAL();
         rpm_sum -= rpm_buffer[rpm_index];
         rpm_buffer[rpm_index] = raw_rpm;
@@ -395,8 +405,8 @@ static void prvMotorPIDTask(void *parameters)
         setDuty(local_duty);
         // if (need_disable)
         //     disableMotor();
-        UARTprintf("%d, %d,  %d,  %d,  %d\n",
-                   (int)rpm, (int)local_target_rpm, (int)local_duty, (int)avg_acceleration, (int)error);
+        // UARTprintf("%d, %d,  %d,  %d,  %d\n",
+        //            (int)rpm, (int)local_target_rpm, (int)local_duty, (int)avg_acceleration, (int)error);
     }
 }
 
@@ -454,11 +464,11 @@ void xPIDTimerHandler(void)
 
 void prvMotorStart()
 {
-    UARTprintf("Motor task started\n");
+    // UARTprintf("Motor task started\n");
     if (motor_ctrl.mutex == NULL)
     {
         // Handle error
-        UARTprintf("Failed to create mutex\n");
+        // UARTprintf("Failed to create mutex\n");
     }
 
     // configure buttons
@@ -479,14 +489,14 @@ void prvMotorStart()
     else
     {
         // Handle error
-        UARTprintf("Failed to take mutex\n");
+        // UARTprintf("Failed to take mutex\n");
     }
     /* start motor phase cycle */
-    enableMotor();
+    // enableMotor();
     /* Kick start the motor */
     // Do an initial read of the hall effect sensor GPIO lines
     /* read hall sensor gpio lines */
-    UARTprintf("Getting hall values\n");
+    // UARTprintf("Getting hall values\n");
     if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
     {
         getHallSensorValues(motor_ctrl.hall_sensor_values);
@@ -498,7 +508,7 @@ void prvMotorStart()
     else
     {
         // Handle error
-        UARTprintf("Failed to take mutex\n");
+        // UARTprintf("Failed to take mutex\n");
     }
 }
 

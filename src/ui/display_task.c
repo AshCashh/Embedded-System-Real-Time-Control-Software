@@ -81,6 +81,7 @@
 #include "includes/accel_sensor_task.h"
 #include "includes/shared_variables.h"
 #include "includes/display_task.h"
+#include "motorlib.h"
 /*-----------------------------------------------------------*/
 #include <stdbool.h>
 
@@ -1111,27 +1112,11 @@ void OnButtonPress(tWidget *psWidget)
     // Start button: only works if not in ESTOP
     if (psWidget == (tWidget *)&g_sStartButton)
     {
-        // if (Motor.MotorState != ESTOP)
-        // {
-        //     Motor.MotorState = RUNNING;
-        //     WidgetPaint((tWidget *)&g_sDashboard);
-        // }
-        if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
+        if (Motor.MotorState != ESTOP)
         {
-            if (!motor_ctrl.Estop)
-            {
-                motor_ctrl.Estop = false; // Clear E-STOP state
-                motor_ctrl.motor_enabled = true; // Enable motor
-                Motor.MotorState = RUNNING; // Set motor state to RUNNING
-                WidgetPaint((tWidget *)&g_sDashboard);
-            }
-            xSemaphoreGive(motor_ctrl.mutex);
+            Motor.MotorState = RUNNING;
+            WidgetPaint((tWidget *)&g_sDashboard);
         }
-        else
-        {
-            // Failed to take mutex, handle error if needed
-        }
-        return;
     }
 
     // Stop button: only stops the motor if running
@@ -1142,7 +1127,6 @@ void OnButtonPress(tWidget *psWidget)
             Motor.MotorState = STOP;
             WidgetPaint((tWidget *)&g_sDashboard);
         }
-        return;
     }
     // E-STOP/ACK button logic
     if (psWidget == (tWidget *)&g_sEStopButton)
@@ -1168,17 +1152,30 @@ void OnButtonPress(tWidget *psWidget)
             PushButtonTextOn(&g_sEStopButton);
             WidgetPaint((tWidget *)&g_sEStopButton);
         }
-        if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
-        {
-            motor_ctrl.Estop = (Motor.MotorState == ESTOP); // Update E-STOP state
-            motor_ctrl.motor_enabled = (Motor.MotorState != ESTOP); // Disable motor if in E-STOP
-            xSemaphoreGive(motor_ctrl.mutex);
-        }
-        else
-        {
-            // Failed to take mutex, handle error if needed
-        }
         WidgetPaint((tWidget *)&g_sDashboard);
+    }
+    /* update motor control */
+    if (xSemaphoreTake(motor_ctrl.mutex, pdMS_TO_TICKS(100)) == pdTRUE)
+    {
+        switch (Motor.MotorState)
+        {
+            case ESTOP:
+                motor_ctrl.Estop = true; // Set E-Stop flag
+                motor_ctrl.motor_enabled = false; // Disable motor
+                break;
+            case IDLE:
+            case STOP:
+                motor_ctrl.Estop = false; // Clear E-Stop flag
+                motor_ctrl.motor_enabled = false; // Disable motor
+                break;
+            case RUNNING:
+                motor_ctrl.Estop = false; // Clear E-Stop flag
+                motor_ctrl.motor_enabled = true; // Enable motor
+                break;
+            default:
+                break;
+        }
+        xSemaphoreGive(motor_ctrl.mutex);
         return;
     }
     // Handle push buttons on the second panel as before
@@ -1429,7 +1426,7 @@ static void vSensorData(uint32_t *data, int dataSize, PlotType plotType, bool fi
         break;
     case PLOT_RPM:
         yMin = 0;
-        yMax = 2500;
+        yMax = 5000;
         yScale = 1; 
         yLabel = "RPM";
         break;
@@ -1437,7 +1434,7 @@ static void vSensorData(uint32_t *data, int dataSize, PlotType plotType, bool fi
         yMin = 0;
         yMax = 1000;
         yScale = 1; 
-        yLabel = "W";
+        yLabel = "mW";
         break;
     default:
         break;
