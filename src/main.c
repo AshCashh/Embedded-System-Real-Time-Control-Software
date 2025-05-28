@@ -190,8 +190,9 @@ int main(void)
         /* Configure application specific hardware and initialize the task thread. */
         // vCreateDisplayTask();
         // SysCtlDelay(10000);
-        // vCreateLightSensorTask();
         vCreateAccelTask();
+        vCreateLightSensorTask();
+        
         /* Start the tasks and timer running. */
         taskEXIT_CRITICAL();
         vTaskStartScheduler();
@@ -216,8 +217,7 @@ void clearI2CBus(void)
 {
     // Force SDA and SCL GPIO control
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPION);
-    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPION))
-        ;
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPION));
 
     GPIOPinTypeGPIOOutput(GPIO_PORTN_BASE, GPIO_PIN_4 | GPIO_PIN_5);
 

@@ -122,6 +122,8 @@
 extern SemaphoreHandle_t xIC2MasterSemaphore;
 extern SemaphoreHandle_t xSampleLightSemaphore;
 
+extern SemaphoreHandle_t xI2CMutex;
+
 extern uint32_t g_ui32SysClock;
 extern bool day;
 
@@ -166,7 +168,7 @@ void vCreateLightSensorTask(void)
                 "Light Sensor Sensing",
                 1024,
                 NULL,
-                tskIDLE_PRIORITY+1,
+                tskIDLE_PRIORITY + 1,
                 NULL);
     TimerHandle_t timer = xTimerCreate(
         "Light Sensor Sensing",
@@ -185,9 +187,11 @@ void vCreateLightSensorTask(void)
 static void prvLightSensorTask(void *pvParameters)
 {
     // Wait for sensor to power up (important!)
-
+    vTaskDelay(pdMS_TO_TICKS(1000));
     // Now initialize the OPT3001 sensor
+    xSemaphoreTake(xI2CMutex, portMAX_DELAY);
     sensorOpt3001Init();
+    xSemaphoreGive(xI2CMutex);
 
     struct AMessage xMessage;
 
@@ -202,29 +206,36 @@ static void prvLightSensorTask(void *pvParameters)
 
     // Test that sensor is set up correctly
     // UARTprintf("Testing OPT3001 Sensor:\n");
+    xSemaphoreTake(xI2CMutex, portMAX_DELAY);
     success = sensorOpt3001Test();
+    xSemaphoreGive(xI2CMutex);
 
     // stay here until sensor is working
     while (!success)
     {
         vTaskDelay(pdMS_TO_TICKS(100)); // Cooperative delay
         UARTprintf("Test Failed, Trying again\n");
+        xSemaphoreTake(xI2CMutex, portMAX_DELAY);
         success = sensorOpt3001Test();
+        xSemaphoreGive(xI2CMutex);
     }
 
     // Loop Forever
     while (1)
     {
-        if (xSemaphoreTake(xSampleLightSemaphore, pdMS_TO_TICKS(50)) == pdTRUE)
+        if (xSemaphoreTake(xSampleLightSemaphore, pdMS_TO_TICKS(500)) == pdTRUE)
         {
             // sampling
+            xSemaphoreTake(xI2CMutex, portMAX_DELAY);
             success = sensorOpt3001Read(&rawData);
+            xSemaphoreGive(xI2CMutex);
+
             if (success)
             {
                 sensorOpt3001Convert(rawData, &convertedLux);
                 filteredLux = MovingAverageFilter(filterBuffer, &filterIndex, &filterSum, FILTER_SIZE, convertedLux);
 
-                //Set event bits based on thresholds
+                // Set event bits based on thresholds
                 if (convertedLux > HIGH_THRESHOLD)
                 {
                     xEventGroupSetBits(xEventGroup, EVENT_HIGH_THRESHOLD);
@@ -237,14 +248,14 @@ static void prvLightSensorTask(void *pvParameters)
                 xMessage.ulTimeStamp = xTaskGetTickCount();
                 xMessage.uFiltered = filteredLux;
                 xMessage.uRaw = convertedLux;
-                //UARTprintf("Lux: %d\n",  xMessage.uRaw);
+                UARTprintf("Lux: %d\n", xMessage.uRaw);
                 if (xQueueSend(xLightQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
                 {
-                    //UARTprintf("Data sent to queue: %d\n", (int)convertedLux);
+                    // UARTprintf("Data sent to queue: %d\n", (int)convertedLux);
                 }
                 else
                 {
-                    //UARTprintf("Error LIGHT: Failed to send data to the queue\n");
+                    // UARTprintf("Error LIGHT: Failed to send data to the queue\n");
                 }
             }
         }
@@ -256,8 +267,8 @@ static void SignalSampling(TimerHandle_t timer)
     xSemaphoreGive(xSampleLightSemaphore);
 }
 
-
-void xOptIntHandler(void) {
+void xOptIntHandler(void)
+{
     BaseType_t xOPTTaskWoken = pdFALSE;
 
     /* Read the PORT P interrupt status to find the cause of the interrupt. */
@@ -265,7 +276,7 @@ void xOptIntHandler(void) {
 
     /* Clear the interrupt. */
     GPIOIntClear(GPIO_PORTM_BASE, ui32Status);
-    //GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, 0);
+    // GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, 0);
     xSemaphoreGiveFromISR(xSampleLightSemaphore, &xOPTTaskWoken);
     portYIELD_FROM_ISR(xOPTTaskWoken);
 }

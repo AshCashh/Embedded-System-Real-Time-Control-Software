@@ -73,40 +73,46 @@ extern uint32_t g_ui32SysClock;
  **************************************************************************************************/
 bool sensorBMI160Init(void)
 {
+    uint8_t err;
+    bmi160ReadErrorStatus(&err);
     vTaskDelay(pdMS_TO_TICKS(300));
     // softreset value to cmd reg
     uint8_t val = 0xB6;
     // reset sensor
-    if (!writeI2C_acc(BMI160_IC2_ADDRESS_VDDIO, REG_CMD, &val, 1))
-    {
+    if (!writeI2Cmul(BMI160_IC2_ADDRESS_VDDIO, REG_CMD, &val, 1))
         return false;
-    }
     vTaskDelay(pdMS_TO_TICKS(150));
+    
+
     // Disable Advanced Power Save
     uint8_t pwr_conf = 0x00;
-    writeI2C_acc(0x69, 0x6C, &pwr_conf, 1);
+    if (!writeI2Cmul(0x69, 0x6C, &pwr_conf, 1))
+        return false;
     vTaskDelay(pdMS_TO_TICKS(10));
 
     // enable accelerometer
     val = 0x11;
-    writeI2C_acc(BMI160_IC2_ADDRESS_VDDIO, 0x7E, &val, 1);
+    if (!writeI2Cmul(BMI160_IC2_ADDRESS_VDDIO, 0x7E, &val, 1))
+        return false;
     vTaskDelay(pdMS_TO_TICKS(10));
 
-    readI2C(BMI160_IC2_ADDRESS_VDDIO, REG_PMU_STATUS, &val); // PMU_STATUS
+    if (!readI2Cmul(BMI160_IC2_ADDRESS_VDDIO, REG_PMU_STATUS, &val, 1)) // PMU_STATUS
+        return false;
     if (!((val & 0x30) == 0x10))
     {
         UARTprintf("[W] Accel not in Normal Mode\n");
     }
 
     uint8_t acc_range = 0b0011;
-    if (!writeI2C_acc(BMI160_IC2_ADDRESS_VDDIO, REG_ACC_RANGE, &acc_range, 1))
+    if (!writeI2Cmul(BMI160_IC2_ADDRESS_VDDIO, REG_ACC_RANGE, &acc_range, 1))
     {
         return false;
     }
+    
     vTaskDelay(pdMS_TO_TICKS(10));
     // config accelerometer
     val = 0x28; // freq
-    if (!writeI2C_acc(BMI160_IC2_ADDRESS_VDDIO, REG_ACC_CONF, &val, 1))
+    if (!writeI2Cmul(BMI160_IC2_ADDRESS_VDDIO, REG_ACC_CONF, &val, 1))
     {
         return false;
     }
@@ -114,7 +120,7 @@ bool sensorBMI160Init(void)
     /* ------ Set up Interrupts on chip ------ */
     // map data ready interrupt to INT1
     uint8_t int1_en_dr = (1 << 7); // enable data ready interrupt
-    if (!writeI2C_acc(BMI160_IC2_ADDRESS_VDDIO, REG_DR_INT_MAP, &int1_en_dr, 1))
+    if (!writeI2Cmul(BMI160_IC2_ADDRESS_VDDIO, REG_DR_INT_MAP, &int1_en_dr, 1))
     {
         return false;
     }
@@ -124,14 +130,14 @@ bool sensorBMI160Init(void)
         (1 << 3)    // INT1 output enabled
         | (0 << 2)  // INT1 push-pull/open-drain
         | (1 << 1); // INT1 active high
-    if (!writeI2C_acc(BMI160_IC2_ADDRESS_VDDIO, REG_IN_OUT_CTRL, &int_behaviour, 1))
+    if (!writeI2Cmul(BMI160_IC2_ADDRESS_VDDIO, REG_IN_OUT_CTRL, &int_behaviour, 1))
     {
         return false;
     }
 
     // enable data ready interrupt, 1 for [1] mask
     uint8_t data_ready_int = (1 << 4);
-    if (!writeI2C_acc(BMI160_IC2_ADDRESS_VDDIO, (REG_INT_EN | 0x01), &data_ready_int, 1))
+    if (!writeI2Cmul(BMI160_IC2_ADDRESS_VDDIO, (REG_INT_EN | 0x01), &data_ready_int, 1))
     { // 0x01 OR for selecting second field
         return false;
     }
@@ -161,7 +167,7 @@ bool sensorBMI160Init(void)
  **************************************************************************************************/
 bool sensorBMI160Read(uint8_t *rawData)
 {
-    if (!readI2C_acc(BMI160_IC2_ADDRESS_VDDIO, REG_ACC_RESULT, rawData, 6))
+    if (!readI2Cmul(BMI160_IC2_ADDRESS_VDDIO, REG_ACC_RESULT, rawData, 6))
     {
         return false;
     }
@@ -182,10 +188,9 @@ bool sensorBMI160Test(void)
     uint8_t val = 0;
     for (int i = 0; i < 10; i++)
     {
-        readI2C(BMI160_IC2_ADDRESS_VDDIO, REG_CHIP_ID, &val);
+        readI2Cmul(BMI160_IC2_ADDRESS_VDDIO, REG_CHIP_ID, &val, 1);
         if (val == CHIP_ID)
             break;
-        vTaskDelay(pdMS_TO_TICKS(10));
     }
 
     if (val != CHIP_ID)
@@ -224,7 +229,7 @@ bool bmi160ReadErrorStatus(uint8_t *err)
 {
     if (err == NULL) return false;
 
-    if (!readI2C(BMI160_I2C_ADDR, BMI160_ERR_REG, err))
+    if (!readI2Cmul(BMI160_I2C_ADDR, BMI160_ERR_REG, err, 1))
     {
         UARTprintf("[!] Failed to read BMI160 ERR_REG\n");
         return false;

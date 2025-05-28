@@ -138,7 +138,9 @@ void sensorOpt3001Enable(bool enable)
 		val = CONFIG_DISABLE;
 	}
 
-	writeI2C(OPT3001_I2C_ADDRESS, REG_CONFIGURATION, (uint8_t*)&val);
+	if (!writeI2Cmul(OPT3001_I2C_ADDRESS, REG_CONFIGURATION, (uint8_t*)&val, 2)) {
+		UARTprintf("OPT3001 Init Failed\n");
+	}
 }
 
 
@@ -156,7 +158,7 @@ bool sensorOpt3001Read(uint16_t *rawData)
 	bool data_ready;
 	uint16_t val;
 
-	if (readI2C(OPT3001_I2C_ADDRESS, REG_CONFIGURATION, (uint8_t *)&val))
+	if (readI2Cmul(OPT3001_I2C_ADDRESS, REG_CONFIGURATION, (uint8_t *)&val, 2))
 	{
 		// Convert from little-endian if necessary
 		val = (val >> 8) | (val << 8);
@@ -166,13 +168,14 @@ bool sensorOpt3001Read(uint16_t *rawData)
 	}
 	else
 	{
+		UARTprintf("Data ready failed\n");
 		return false;
 	}
 
 	if (data_ready)
 	{
 		uint16_t val;
-		if (readI2C(OPT3001_I2C_ADDRESS, REG_RESULT, (uint8_t *)&val))
+		if (readI2Cmul(OPT3001_I2C_ADDRESS, REG_RESULT, (uint8_t *)&val, 2))
 		{
 			// Swap bytes (big-endian to little-endian)
 			*rawData = (val >> 8) | (val << 8);
@@ -180,6 +183,7 @@ bool sensorOpt3001Read(uint16_t *rawData)
 	}
 	else
 	{
+		UARTprintf("Data read failed\n");
 		return false;
 	}
 
@@ -199,7 +203,7 @@ bool sensorOpt3001Test(void)
 	
 	// UARTprintf("FINDING MANUFACTURER ID:\n");
 	// Check manufacturer ID
-	readI2C(OPT3001_I2C_ADDRESS, REG_MANUFACTURER_ID, (uint8_t *)&val);
+	readI2Cmul(OPT3001_I2C_ADDRESS, REG_MANUFACTURER_ID, (uint8_t *)&val, 2);
 	
 	// Swap bytes (big-endian to little-endian)
 	val = (val >> 8) | (val << 8);
@@ -212,10 +216,9 @@ bool sensorOpt3001Test(void)
 	//print Man ID
 	// UARTprintf("Manufacturer ID Correct: %c%c\n", (val >> 8) & 0x00FF, val & 0x00FF);
 
-	// UARTprintf("FINDING DEVICE ID:\n");
 
 	// Check device ID
-	readI2C(OPT3001_I2C_ADDRESS, REG_DEVICE_ID, (uint8_t *)&val);
+	readI2Cmul(OPT3001_I2C_ADDRESS, REG_DEVICE_ID, (uint8_t *)&val, 2);
 	
 	// Swap bytes (big-endian to little-endian)
 	val = (val >> 8) | (val << 8);
