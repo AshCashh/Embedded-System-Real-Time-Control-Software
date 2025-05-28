@@ -127,6 +127,8 @@ extern SemaphoreHandle_t xSampleAccelSemaphore;
 extern SemaphoreHandle_t xEmergencyStop;
 extern SemaphoreHandle_t xEmergencyMutex;
 
+extern SemaphoreHandle_t xI2CMutex;
+
 extern uint32_t g_ui32SysClock;
 extern uint32_t accel_threshold;
 
@@ -222,7 +224,9 @@ static void prvAccelTask(void *pvParameters)
         {
 
             // UARTprintf("R\n");
+
             xSemaphoreTake(xI2CMutex, portMAX_DELAY);
+
             read_success = sensorBMI160Read(rawData);
             xSemaphoreGive(xI2CMutex);
             if (!read_success)
@@ -308,6 +312,7 @@ static void prvAccelTask(void *pvParameters)
                     }
                     xSemaphoreGive(xEmergencyMutex);
                 }
+
                 if (xQueueSend(xAccelQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
                 {
                     // UARTprintf("Accel sent: %d\n", xMessage.uRaw);
@@ -346,27 +351,6 @@ void xI2CHandler(void)
     xSemaphoreGiveFromISR(xIC2MasterSemaphore, &xSignalTaskWoken);
 
     portYIELD_FROM_ISR(xSignalTaskWoken);
-}
-
-void xBMI160DataReadyHandler(void)
-{
-    BaseType_t xSignalTaskWoken = pdFALSE;
-    // static uint32_t lastTick = 0;
-    // uint32_t now = xTaskGetTickCount();
-    // UARTprintf("delta=%d\n", now, now - lastTick);
-    // lastTick = now;
-    GPIOIntClear(GPIO_PORTD_BASE, GPIO_PIN_4);
-    xSemaphoreGiveFromISR(xSampleAccelSemaphore, &xSignalTaskWoken);
-    portYIELD_FROM_ISR(xSignalTaskWoken);
-    sem_counter++;
-    // static int counter = 0;
-    // static int sample = 0;
-    // if (counter >= 300)
-    // {
-    //     UARTprintf("A\n");
-    //     counter = 0;
-    // }
-    // counter++;
 }
 
 void xBMI160DataReadyHandler(void)
