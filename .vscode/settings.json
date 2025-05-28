@@ -9,6 +9,7 @@
         "tuple": "c",
         "utility": "c",
         "istream": "c",
-        "streambuf": "c"
+        "streambuf": "c",
+        "common.h": "c"
     }
 }

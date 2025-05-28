@@ -75,7 +75,6 @@
 #include "variables.h"
 #include "motorlib.h"
 #include "includes/common.h"
-
 #define BUTTON_DUTY_INCREMENT 5
 
 extern motorcontrol_t motor_ctrl;
@@ -108,6 +107,7 @@ extern QueueHandle_t xPowerQueue;
  */
 // volatile static uint32_t g_pui32ButtonPressed = NULL;
 
+extern float LowPassFilter(float previousValue, float newValue, float alpha);
 void HallSensorHandler(void);
 
 void ADC1IntHandler(void);
@@ -200,7 +200,6 @@ float convert_val_to_current(uint32_t adc_value)
 
 static void prvCurrentReadTask(void *pvParameters)
 {
-
     /* RPM moving‐average state */
     static float current_1_buffer[MOVING_AVERAGE_SAMPLES] = {0};
     static uint32_t current_index = 0;
@@ -214,15 +213,27 @@ static void prvCurrentReadTask(void *pvParameters)
     static float current_e_buffer[MOVING_AVERAGE_SAMPLES] = {0};
     static float current_e_sum = 0.0f;
 
+    float Static_point1, Static_point2;
+    Static_point1 = 0.0f; // Initial static point for current difference
+    Static_point2 = 0.0f; // Initial static point for current difference
+
+    float Large_Current_1_Average = 0.0f;
+    float Large_Current_2_Average = 0.0f;
+
+    uint32_t large_count = 0; // Reset large count for current averaging
+
     uint32_t adcValues[2];
     float voltage0, voltage4, voltageE;
     float raw_current0, raw_current4, raw_currentE;
 
     float filtered_current1, filtered_current2, filtered_currentE;
 
-
     float power0_filtered, power1_filtered, powerE_filtered;
     float power_raw0, power_raw1, power_rawE;
+
+    filtered_current1 = 0.0f;
+    filtered_current2 = 0.0f;
+    filtered_currentE = 0.0f;
 
     float power_raw, power_filtered;
 
@@ -252,8 +263,8 @@ static void prvCurrentReadTask(void *pvParameters)
             voltageE = (voltage0 + voltage4) / 2.0f;
 
             // // Convert to current: I = (V/2 - 1.65) / (Rshunt × Gain)
-            raw_current0 = (((VREF_DIV2)-voltage0) / (GAIN * RSHUNT)); //+ 0.13f;  // A
-            raw_current4 = (((VREF_DIV2)-voltage4) / (GAIN * RSHUNT)); //- 0.473f; // A
+            raw_current0 = ((((VREF_DIV2)-voltage0) / (GAIN * RSHUNT)) - Static_point1); //+ 0.13f;  // A
+            raw_current4 = ((((VREF_DIV2)-voltage4) / (GAIN * RSHUNT)) - Static_point2); //- 0.473f; // A
 
             // calculate the estimated current E with some error correction
             // current0_calc_error = (((VREF_DIV2)-voltage0 - 0.02f) / (GAIN * RSHUNT));
@@ -272,10 +283,31 @@ static void prvCurrentReadTask(void *pvParameters)
 
             power_raw = (power_raw0 + power_raw1 + power_rawE); // Average raw power in Watts
 
+            if (large_count > ADC_CURRENT_SAMPLES_AVERAGE_FIX)
+            {
+                // Reset the large count and averages
+                Static_point1 = Static_point1 + (Large_Current_1_Average / (float)ADC_CURRENT_SAMPLES_AVERAGE_FIX);
+                Static_point2 = Static_point2 + (Large_Current_2_Average / (float)ADC_CURRENT_SAMPLES_AVERAGE_FIX);
+                large_count = 0;
+                Large_Current_1_Average = 0.0f;
+                Large_Current_2_Average = 0.0f;
+
+            }
+            large_count++;
+
+            Large_Current_1_Average = Large_Current_1_Average + raw_current0;
+            Large_Current_2_Average = Large_Current_2_Average + raw_current4;
+
+            if (current_index > ADC_CURRENT_SAMPLES)
+            {
+                raw_current0 = LowPassFilter(filtered_current1, raw_current0, LOW_PASS_FILTER_ALPHA);
+                raw_current4 = LowPassFilter(filtered_current2, raw_current4, LOW_PASS_FILTER_ALPHA);
+                raw_currentE = LowPassFilter(filtered_currentE, raw_currentE, LOW_PASS_FILTER_ALPHA);
+            }
+
             //
             current_index = (current_index + 1) % ADC_CURRENT_SAMPLES;
             // Calculate the average current
-            
 
             /*Current 1 (pin0)*/
             current_1_sum -= current_1_buffer[current_index];
