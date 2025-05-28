@@ -26,6 +26,25 @@ extern SemaphoreHandle_t xIC2MasterSemaphore;
 extern SemaphoreHandle_t xI2CMutex;
 
 extern uint32_t g_ui32SysClock;
+
+
+bool waitForAck(uint32_t i2cBase) {
+    // Wait for the I2C ISR to give the semaphore
+    if (xSemaphoreTake(xIC2MasterSemaphore, pdMS_TO_TICKS(100)) != pdTRUE) {
+        UARTprintf("[!] waitForAck: Timeout on I2C bus 0x%08X\n", i2cBase);
+        return false;
+    }
+
+    // Check if an error occurred during the transfer
+    uint32_t error = I2CMasterErr(i2cBase);
+    if (error != I2C_MASTER_ERR_NONE) {
+        UARTprintf("[!] waitForAck: I2C error 0x%02X on base 0x%08X\n", error, i2cBase);
+        return false;
+    }
+
+    return true;
+}
+
 /*
  * Sets slave address to ui8Addr
  * Puts ui8Reg followed by two data bytes in *data and transfers
@@ -91,7 +110,7 @@ bool writeI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
  * Puts ui8Reg followed by two data bytes in *data and transfers
  * over i2c
  */
-bool writeI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint8_t len)
+bool writeI2Cmul(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint8_t len)
 {
     if (len == 0)
         return false;
@@ -209,7 +228,7 @@ bool readI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
     return true;
 }
 
-bool readI2C_acc(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint16_t len)
+bool readI2Cmul(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data, uint16_t len)
 {
     if (len < 1)
         return false;
@@ -382,3 +401,5 @@ void unstickI2CBus(void)
     SysCtlDelay(1000);
     I2CMasterInitExpClk(I2C2_BASE, SysCtlClockGet(), false);
 }
+
+
