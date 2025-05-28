@@ -322,13 +322,11 @@ static void prvCurrentReadTask(void *pvParameters)
             current_e_sum += raw_currentE;
             filtered_currentE = current_e_sum / (float)ADC_CURRENT_SAMPLES;
 
-            power0_filtered = (filtered_current1 * MOTOR_NORMAL_VOLTAGE); // in Watts
-            power1_filtered = (filtered_current2 * MOTOR_NORMAL_VOLTAGE); // in Watts
-            powerE_filtered = (filtered_currentE * MOTOR_NORMAL_VOLTAGE); // in Watts
+                    
             // UARTprintf("%d, %d, %d\n", (int)(1000 * filtered_current1), (int)(1000 * filtered_current2), (int)(1000 * filtered_currentE));
-            power_filtered = (power0_filtered + power1_filtered + powerE_filtered);
-            float power = estimate_instantaneous_power(filtered_current1, filtered_current2);
-            UARTprintf("%d\n", (int)(power*1000));
+            power_raw = estimate_instantaneous_power(raw_current0, raw_current4);
+            power_filtered = estimate_instantaneous_power(filtered_current1, filtered_current2);
+            // UARTprintf("%d,%d\n", (int)(power_raw*1000),(int)(power_filtered*1000));
             xMessage.uFiltered = (uint32_t)(power_filtered * 1000); // Convert to mA
             xMessage.uRaw = (uint32_t)(power_raw * 1000);           // Convert to mA
             xMessage.ulTimeStamp = xTaskGetTickCount();
