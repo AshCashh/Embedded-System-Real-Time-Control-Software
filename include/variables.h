@@ -54,6 +54,7 @@
 
 #define TICKS_TO_MINUTES(t) ( ((float)(t) / (float)configTICK_RATE_HZ) / 60.0f )
 
+#define QUEUE_LENGTH 300
 
 #define PID_FREQUENCY 120   //Hz
 
@@ -162,7 +163,7 @@ typedef struct
     uint32_t hall_currents[3]; /* hall sensor currents */
     bool motor_enabled; /* stall prevention flag */
     bool brake; /* brake flag */
-    bool Estop; /* emergency stop flag */
+    bool estop; /* emergency stop flag */
     uint8_t stall_counter; /* reactivation count */
     float rpm; /* current rpm value */
     float target_rpm; /* target rpm value */
