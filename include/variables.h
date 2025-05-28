@@ -114,14 +114,15 @@ static inline float clamp(float value, float min, float max)
 /*Current measure Variales*/
 
 #define VREF 3.3f /* Reference voltage for ADC */
+#define VREF_DIV2 1.65f /* Reference voltage divided by 2 */
 #define RSHUNT 0.007f /* Shunt resistor value in ohms */
 #define GAIN 10.0f /* Gain of the current sense amplifier with a 47K resistor */
 
 #define ADC_MAX_VALUE 4095.0f /* Maximum ADC value for 12-bit resolution */
 
-#define ADC_CURRENT_FREQ 160
+#define ADC_CURRENT_FREQ 200
 
-#define ADC_CURRENT_SAMPLES 30 /* Number of samples to average for current measurement */
+#define ADC_CURRENT_SAMPLES 100.0f /* Number of samples to average for current measurement */
 
 #define Motor_INEFFICIENCY 0.6f
 
@@ -130,14 +131,6 @@ static inline float clamp(float value, float min, float max)
 #define AMPS_TO_MILLIAMPS(amps) \
     ((amps) * 1000.0f) /* Convert amps to milliamps for display */
 
-#define C_ABS(X) \
-    ((X) < 0 ? -(X) : (X)) /* Absolute value of a float */
-
-#define Squared(x) \
-    (float)((x) * (x)) /* Square a value */
-
-#define POWER_CALCULATE(Current) \
-    (float)((Current) * MOTOR_NORMAL_VOLTAGE)
 
 
 /* Data types for motor configuration and control */

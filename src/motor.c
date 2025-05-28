@@ -186,6 +186,18 @@ void vCreateMotorTask(void)
 //     IntMasterEnable();
 // }
 
+float convert_val_to_current(uint32_t adc_value)
+{
+    /*
+     * Convert the ADC value to current in mA
+     * Formula: I = (V/2 - 1.65) / (Rshunt × Gain)
+     * where V = adc_value / ADC_MAX_VALUE * VREF
+     */
+    float voltage = (float)(adc_value / ADC_MAX_VALUE) * VREF;
+    float current = (((VREF / 2.f) - voltage) / (GAIN * RSHUNT)); // A
+    return current;
+}
+
 static void prvCurrentReadTask(void *pvParameters)
 {
     uint32_t adcValues[2];
@@ -202,12 +214,16 @@ static void prvCurrentReadTask(void *pvParameters)
     current4_avg = 0.0f;
     currentE_avg = 0.0f;
 
-    float power0,power1,powerE;
+    float power0_filtered, power1_filtered, powerE_filtered;
     float power_raw0, power_raw1, power_rawE;
 
-    // UARTprintf("Current Read Task Started\n");
+    float power_raw, power_filtered;
+
+    power_filtered = 0.0f;
+
+    UARTprintf("Current Read Task Started\n");
     AMessage xMessage;
-    
+
     for (;;)
     {
         if (xSemaphoreTake(xPowerMotorCalcsemaphore, pdMS_TO_TICKS(1000)) == pdTRUE)
@@ -215,25 +231,33 @@ static void prvCurrentReadTask(void *pvParameters)
             //  UARTprintf("before trigger\n");
             // Read conversion results
             ADCSequenceDataGet(ADC1_BASE, 1, adcValues);
+            uint32_t ADC_SENSOR, ADC_SENSOR_4;
 
-            voltage0 = (float)(adcValues[0] / ADC_MAX_VALUE) * VREF;
-            voltage4 = (float)(adcValues[1] / ADC_MAX_VALUE) * VREF;
+            // uint32_t ADC_ADJUSMENT = 100; // Adjust this value based on calibration
+
+            ADC_SENSOR = adcValues[0];
+            ADC_SENSOR_4 = adcValues[1];
+
+            // UARTprintf("ADC Values: %d, %d,%d\n", ADC_SENSOR, ADC_SENSOR_4,(ADC_SENSOR - ADC_SENSOR_4));   
+
+
+
+            voltage0 = (((float)ADC_SENSOR) / (float)ADC_MAX_VALUE) * VREF;
+            voltage4 = (((float)ADC_SENSOR_4)/ (float)ADC_MAX_VALUE) * VREF;
             voltageE = (voltage0 + voltage4) / 2.0f;
 
-            // UARTprintf("%d,%d,%d\n", (int)(1000*voltage0), (int)(1000*voltage4),(int)(1000*voltageE));
-
             // // Convert to current: I = (V/2 - 1.65) / (Rshunt × Gain)
-            current0 = (((VREF / 2) - voltage0) / (GAIN * RSHUNT)); // A
-            current4 = (((VREF / 2) - voltage4) / (GAIN * RSHUNT)); // A
+            current0 = (((VREF_DIV2)-voltage0) / (GAIN * RSHUNT)) + 0.13f; // A
+            current4 = (((VREF_DIV2)-voltage4) / (GAIN * RSHUNT)) - 0.473f; // A
 
-            
-            current0_calc_error = (((VREF / 2) - voltage0-0.02f) / (GAIN * RSHUNT));
+            // calculate the estimated current E with some error correction
+            current0_calc_error = (((VREF_DIV2)-voltage0 - 0.02f) / (GAIN * RSHUNT));
 
-            // // I1 +I2 +I3 = 0 because the motor is a three-phase system
+            // // I1 +I2 +I3 = (motor Inefficiency [constant]) because the motor is a non-perfect three-phase system
             // // Current E is the estimated 3rd current
-            // // I3 = i(I1+I2)
+            // // I3 = -(I1+I2) + Motor_INEFFICIENCY
 
-            currentE = -(current0_calc_error + current4)+Motor_INEFFICIENCY;
+            currentE = -(current0 + current4);
 
             // UARTprintf("%d,%d,%d\n", (int)(1000*current0), (int)(1000*current4), (int)(1000*(currentE)));
 
@@ -241,44 +265,42 @@ static void prvCurrentReadTask(void *pvParameters)
             current4_avg += current4;
             currentE_avg += currentE;
 
-            counter++;
+            power_raw0 = current0 * MOTOR_NORMAL_VOLTAGE; // in Watts
+            power_raw1 = current4 * MOTOR_NORMAL_VOLTAGE; // in Watts
+            power_rawE = currentE * MOTOR_NORMAL_VOLTAGE; // in Watts
 
+            power_raw = (power_raw0 + power_raw1 + power_rawE); // Average raw power in Watts
+            counter++;
             if (counter >= ADC_CURRENT_SAMPLES)
             {
                 // Calculate the average current
-                filtered_current0 = AMPS_TO_MILLIAMPS((current0_avg / ADC_CURRENT_SAMPLES));
-                filtered_current4 = AMPS_TO_MILLIAMPS((current4_avg / ADC_CURRENT_SAMPLES));
-                filtered_currentE = AMPS_TO_MILLIAMPS((currentE_avg / ADC_CURRENT_SAMPLES));
-                // print to uart
+                filtered_current0 = (current0_avg / ADC_CURRENT_SAMPLES);
+                filtered_current4 = (current4_avg / ADC_CURRENT_SAMPLES);
+                filtered_currentE = (currentE_avg / ADC_CURRENT_SAMPLES);
 
-                power0 = (POWER_CALCULATE(filtered_current0))/1000;
-                power1 = (POWER_CALCULATE(filtered_current4))/1000;
-                powerE = (POWER_CALCULATE(filtered_currentE))/1000; // in mWatts
-                power_raw0 = (POWER_CALCULATE(current0))/1000;
-                power_raw1 = (POWER_CALCULATE(current4))/1000;
-                power_rawE = (POWER_CALCULATE(currentE))/1000; // in mWatts
-                // UARTprintf("%d\n", (int)Power);
-                // UARTprintf("%d,%d,%d\n", (int)filtered_current0, (int)filtered_current4, (int)filtered_currentE);
-                // UARTprintf("%d,%d,%d\n", (int)power0, (int)power1, (int)powerE);
-                // Reset the counter and averages
+                power0_filtered = (filtered_current0 * MOTOR_NORMAL_VOLTAGE); // in Watts
+                power1_filtered = (filtered_current4 * MOTOR_NORMAL_VOLTAGE); // in Watts
+                powerE_filtered = (filtered_currentE * MOTOR_NORMAL_VOLTAGE); // in Watts
+                UARTprintf("%d, %d, %d\n", (int)(1000 * filtered_current0), (int)(1000 * filtered_current4), (int)(1000 * filtered_currentE));
+                power_filtered = (power0_filtered + power1_filtered + powerE_filtered); 
+
                 counter = 0;
                 current0_avg = 0;
                 current4_avg = 0;
                 currentE_avg = 0;
-                float power = (power0 + power1 + powerE) / 3.0f; // Average power in Watts
-                float power_raw = (power_raw0 + power_raw1 + power_rawE) / 3.0f; // Average raw power in Watts
-                xMessage.uFiltered = (uint32_t)(filtered_current0 * 1000); // Convert to mA
-                xMessage.uRaw = (uint32_t)(current0 * 1000); // Convert to mA
-                xMessage.ulTimeStamp = xTaskGetTickCount();
-                if (xQueueSend(xMotorRPMQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
-                {
-                    // UARTprintf("Current sent: %d\n", xMessage.uRaw);
-                }
-                else
-                {
-                    // UARTprintf("Error CURRENT: Failed to send data to the queue\n");
-                }
-                
+            }
+            // UARTprintf("%d,%d\n", (int)(power_filtered*1000), (int)(power_raw*1000));
+            xMessage.uFiltered = (uint32_t)(power_filtered*1000); // Convert to mA
+            xMessage.uRaw = (uint32_t)(power_raw*1000);  // Convert to mA
+            xMessage.ulTimeStamp = xTaskGetTickCount();
+
+            if (xQueueSend(xMotorRPMQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
+            {
+                // UARTprintf("Current sent: %d\n", xMessage.uRaw);
+            }
+            else
+            {
+                // UARTprintf("Error CURRENT: Failed to send data to the queue\n");
             }
         }
 
@@ -374,12 +396,12 @@ static void prvMotorPIDTask(void *parameters)
             ramped_target_rpm = local_target_rpm;
         }
 
-
         /* send rpm in queue */
         xMessage.ulTimeStamp = xTaskGetTickCount();
         xMessage.uFiltered = (uint32_t)(rpm);
         xMessage.uRaw = (uint32_t)(raw_rpm);
-        if (xQueueSend(xMotorRPMQueue, (void *)&xMessage, (TickType_t)0) != pdPASS);
+        if (xQueueSend(xMotorRPMQueue, (void *)&xMessage, (TickType_t)0) != pdPASS)
+            ;
         {
         }
         /* PID loop */
