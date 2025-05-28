@@ -94,10 +94,21 @@ extern void HallSensorHandler(void);
 extern void vCreateMotorTask(void);
 static void prvConfigureHallInts(void);
 static void prvConfigurePIDTimer(void);
+
+
+extern void xTimerHandler(void);
+
+extern void ADC1IntHandler(void);
+
 extern void xPIDTimerHandler(void);
 
 static void prvConfigureADCInts(void);
+
+static void prvConfigureADCInts(void);
 static void prvConfigureCurrentTimer(void);
+
+
+
 /*-----------------------------------------------------------*/
 
 SemaphoreHandle_t xPIDTimerSemaphore = NULL;

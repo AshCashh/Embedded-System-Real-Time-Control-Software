@@ -63,19 +63,20 @@
 
 #define SECONDS_PER_MINUTE 60
 
-#define MAX_ACCELERATION_RPMS 500.0f
-#define MAX_DECELERATION_RPMS 500.0f
-#define ESTOP_DECELERATION_RPMS 1000.0f
+#define ACCELERATION_TOLERANCE 0.85f
+#define MAX_ACCELERATION_RPMS (ACCELERATION_TOLERANCE * 500.0f) 
+#define MAX_DECELERATION_RPMS (ACCELERATION_TOLERANCE * 500.0f)
+#define ESTOP_DECELERATION_RPMS (ACCELERATION_TOLERANCE * 1000.0f)
 
 static inline float count_to_rpm(int count)
 {
     return ((float)count / COUNT_PER_REVOLUTION) * PID_FREQUENCY * SECONDS_PER_MINUTE;
 }
-#define MOVING_AVERAGE_SAMPLES  30
-
-#define Kp   0.05f
-#define Ki   0.04f 
-#define Kd   0.04f 
+#define MOVING_AVERAGE_SAMPLES 60
+/* PID variables */
+#define Kp 0.16 /* Proportional gain */
+#define Kd 0.06 /* Derivative gain */
+#define Ki 0.038  /* Integral gain */
 
 #define dt 1/PID_FREQUENCY 
 #define EPSILON 1e-6f
@@ -119,15 +120,25 @@ static inline float clamp(float value, float min, float max)
 
 #define ADC_MAX_VALUE 4095.0f /* Maximum ADC value for 12-bit resolution */
 
-#define ADC_CURRENT_SAMPLES 1 /* Number of samples to average for current measurement */
+#define ADC_CURRENT_FREQ 160
+
+#define ADC_CURRENT_SAMPLES 30 /* Number of samples to average for current measurement */
+
+#define Motor_INEFFICIENCY 0.6f
+
+#define MOTOR_NORMAL_VOLTAGE 24.0f /* Normal operating voltage of the motor in volts */
 
 #define AMPS_TO_MILLIAMPS(amps) \
     ((amps) * 1000.0f) /* Convert amps to milliamps for display */
 
+#define C_ABS(X) \
+    ((X) < 0 ? -(X) : (X)) /* Absolute value of a float */
+
 #define Squared(x) \
     (float)((x) * (x)) /* Square a value */
 
-
+#define POWER_CALCULATE(Current) \
+    (float)((Current) * MOTOR_NORMAL_VOLTAGE)
 
 
 /* Data types for motor configuration and control */

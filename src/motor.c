@@ -74,6 +74,7 @@
 #include "driverlib/pwm.h"
 #include "variables.h"
 #include "motorlib.h"
+#include "includes/common.h"
 
 #define BUTTON_DUTY_INCREMENT 5
 
@@ -82,16 +83,17 @@ extern motorcontrol_t motor_ctrl;
 volatile float latest_rpm;
 volatile uint32_t last_tick = 0;
 uint32_t last_hall_update = 0;
+volatile uint32_t count = 0;
 /*
  * Time stamp global variable.
  */
 volatile uint32_t g_ui32TimeStamp = 0;
-volatile uint32_t ui32ButtonStatus;
+// volatile uint32_t ui32ButtonStatus;
 
 extern volatile uint32_t g_ui32SysClock;
 
 /*Semaphores intialised in main*/
-extern SemaphoreHandle_t xButton1Semaphore;
+// extern SemaphoreHandle_t xButtonSemaphore;
 extern SemaphoreHandle_t xPIDTimerSemaphore;
 extern SemaphoreHandle_t xCountMutex;
 extern SemaphoreHandle_t xEstop;
@@ -102,21 +104,23 @@ QueueHandle_t xMotorTimestampQueue;
 /*
  * Global variable to log the last GPIO button pressed.
  */
-volatile static uint32_t g_pui32ButtonPressed = NULL;
+// volatile static uint32_t g_pui32ButtonPressed = NULL;
 
 void HallSensorHandler(void);
+
+void ADC1IntHandler(void);
 /*-----------------------------------------------------------*/
 
 /*
  * The tasks as described in the comments at the top of this file.
  */
-static void prvMotorTask(void *pvParameters);
-static void prvButtonTask(void *pvParameters);
+// static void prvMotorTask(void *pvParameters);
+// static void prvButtonTask(void *pvParameters);
 static void prvMotorPIDTask(void *pvParameters);
 static void prvMotorStart(void);
 
-static void prvEmergencyCheckTask(void *pvParameters);
-static void prvEmergencyAckTask(void *pvParameters);
+// static void prvEmergencyCheckTask(void *pvParameters);
+// static void prvEmergencyAckTask(void *pvParameters);
 static void prvCurrentReadTask(void *pvParameters);
 
 /*
@@ -124,7 +128,7 @@ static void prvCurrentReadTask(void *pvParameters);
  */
 void vCreateMotorTask(void);
 
-static void prvConfigureButton(void);
+// static void prvConfigureButton(void);
 
 // void prvConfigureButton(void);
 
@@ -148,12 +152,12 @@ void vCreateMotorTask(void)
      *  - The task handle is NULL */
 
     xMotorTimestampQueue = xQueueCreate(10, sizeof(uint32_t));
-    xTaskCreate(prvButtonTask,
-                "ButtonTask",
-                configMINIMAL_STACK_SIZE,
-                NULL,
-                tskIDLE_PRIORITY + 3,
-                NULL);
+    // xTaskCreate(prvButtonTask,
+    //             "ButtonTask",
+    //             configMINIMAL_STACK_SIZE,
+    //             NULL,
+    //             tskIDLE_PRIORITY + 3,
+    //             NULL);
     xTaskCreate(prvMotorPIDTask,
                 "MotorPID",
                 configMINIMAL_STACK_SIZE,
@@ -161,18 +165,18 @@ void vCreateMotorTask(void)
                 tskIDLE_PRIORITY + 2,
                 NULL);
 
-    xTaskCreate(prvEmergencyCheckTask,
-                "EmergencyCheck",
-                configMINIMAL_STACK_SIZE,
-                NULL,
-                tskIDLE_PRIORITY + 4,
-                NULL);
-    xTaskCreate(prvEmergencyAckTask,
-                "EmergencyAck",
-                configMINIMAL_STACK_SIZE,
-                NULL,
-                tskIDLE_PRIORITY + 3,
-                NULL);
+    // xTaskCreate(prvEmergencyCheckTask,
+    //             "EmergencyCheck",
+    //             configMINIMAL_STACK_SIZE,
+    //             NULL,
+    //             tskIDLE_PRIORITY + 4,
+    //             NULL);
+    // xTaskCreate(prvEmergencyAckTask,
+    //             "EmergencyAck",
+    //             configMINIMAL_STACK_SIZE,
+    //             NULL,
+    //             tskIDLE_PRIORITY + 3,
+    //             NULL);
     xTaskCreate(prvCurrentReadTask,
                 "CurrentRead",
                 configMINIMAL_STACK_SIZE,
@@ -181,24 +185,24 @@ void vCreateMotorTask(void)
                 NULL);
 }
 /*-----------------------------------------------------------*/
-static void prvConfigureButton(void)
-{
-    IntMasterDisable();
-    /* Initialize the LaunchPad Buttons. */
-    ButtonsInit();
+// static void prvConfigureButton(void)
+// {
+//     IntMasterDisable();
+//     /* Initialize the LaunchPad Buttons. */
+//     ButtonsInit();
 
-    /* Configure both switches to trigger an interrupt on a falling edge. */
-    GPIOIntTypeSet(BUTTONS_GPIO_BASE, ALL_BUTTONS, GPIO_FALLING_EDGE);
+//     /* Configure both switches to trigger an interrupt on a falling edge. */
+//     GPIOIntTypeSet(BUTTONS_GPIO_BASE, ALL_BUTTONS, GPIO_FALLING_EDGE);
 
-    /* Enable the interrupt for LaunchPad GPIO Port in the GPIO peripheral. */
-    GPIOIntEnable(BUTTONS_GPIO_BASE, ALL_BUTTONS);
+//     /* Enable the interrupt for LaunchPad GPIO Port in the GPIO peripheral. */
+//     GPIOIntEnable(BUTTONS_GPIO_BASE, ALL_BUTTONS);
 
-    /* Enable the Port F interrupt in the NVIC. */
-    IntEnable(INT_GPIOJ);
+//     /* Enable the Port F interrupt in the NVIC. */
+//     IntEnable(INT_GPIOJ);
 
-    /* Enable global interrupts in the NVIC. */
-    IntMasterEnable();
-}
+//     /* Enable global interrupts in the NVIC. */
+//     IntMasterEnable();
+// }
 
 static void prvCurrentReadTask(void *pvParameters)
 {
@@ -211,9 +215,12 @@ static void prvCurrentReadTask(void *pvParameters)
     float filtered_current0, filtered_current4, filtered_currentE;
 
     float current0_avg, current4_avg, currentE_avg;
+    float current0_calc_error;
     current0_avg = 0.0f;
     current4_avg = 0.0f;
     currentE_avg = 0.0f;
+
+    float power0,power1,powerE;
 
     UARTprintf("Current Read Task Started\n");
 
@@ -223,39 +230,30 @@ static void prvCurrentReadTask(void *pvParameters)
         {
 
             //  UARTprintf("before trigger\n");
-            // Trigger ADC1 conversion
-            ADCProcessorTrigger(ADC1_BASE, 1);
-            // UARTprintf("after trigger\n");
-
-            // Wait until complete
-            // UARTprintf("Waiting for ADC conversion...\n");
-            while (!ADCIntStatus(ADC1_BASE, 1, false))
-            {
-            }
-            // UARTprintf("ADC conversion complete\n");
-            // Clear ADC interrupt flag
-            ADCIntClear(ADC1_BASE, 1);
 
             // Read conversion results
             ADCSequenceDataGet(ADC1_BASE, 1, adcValues);
 
             voltage0 = (float)(adcValues[0] / ADC_MAX_VALUE) * VREF;
             voltage4 = (float)(adcValues[1] / ADC_MAX_VALUE) * VREF;
-            // voltageE = (float)(voltage0 + voltage4) / 2.0f;
+            voltageE = (voltage0 + voltage4) / 2.0f;
 
             // UARTprintf("%d,%d,%d\n", (int)(1000*voltage0), (int)(1000*voltage4),(int)(1000*voltageE));
 
             // // Convert to current: I = (V/2 - 1.65) / (Rshunt × Gain)
-            current0 = ((VREF / 2 - voltage0) / (GAIN * RSHUNT)); // A
-            current4 = ((VREF / 2 - voltage4) / (GAIN * RSHUNT)); // A
+            current0 = (((VREF / 2) - voltage0) / (GAIN * RSHUNT)); // A
+            current4 = (((VREF / 2) - voltage4) / (GAIN * RSHUNT)); // A
+
+            
+            current0_calc_error = (((VREF / 2) - voltage0-0.02f) / (GAIN * RSHUNT));
 
             // // I1 +I2 +I3 = 0 because the motor is a three-phase system
             // // Current E is the estimated 3rd current
             // // I3 = i(I1+I2)
 
-            currentE = -(current0 + current4);
+            currentE = -(current0_calc_error + current4)+Motor_INEFFICIENCY;
 
-            // UARTprintf("%d,%d,%d\n", (int)(current0), (int)(current4), (int)(currentE));
+            // UARTprintf("%d,%d,%d\n", (int)(1000*current0), (int)(1000*current4), (int)(1000*(currentE)));
 
             current0_avg += current0;
             current4_avg += current4;
@@ -266,16 +264,24 @@ static void prvCurrentReadTask(void *pvParameters)
             if (counter >= ADC_CURRENT_SAMPLES)
             {
                 // Calculate the average current
-                filtered_current0 = AMPS_TO_MILLIAMPS((current0_avg /= ADC_CURRENT_SAMPLES));
-                filtered_current4 = AMPS_TO_MILLIAMPS((current4_avg /= ADC_CURRENT_SAMPLES));
-                filtered_currentE = AMPS_TO_MILLIAMPS((currentE_avg /= ADC_CURRENT_SAMPLES));
+                filtered_current0 = AMPS_TO_MILLIAMPS((current0_avg / ADC_CURRENT_SAMPLES));
+                filtered_current4 = AMPS_TO_MILLIAMPS((current4_avg / ADC_CURRENT_SAMPLES));
+                filtered_currentE = AMPS_TO_MILLIAMPS((currentE_avg / ADC_CURRENT_SAMPLES));
                 // print to uart
+
+                power0 = (POWER_CALCULATE(filtered_current0))/1000;
+                power1 = (POWER_CALCULATE(filtered_current4))/1000;
+                powerE = (POWER_CALCULATE(filtered_currentE))/1000; // in mWatts
+                // UARTprintf("%d\n", (int)Power);
                 // UARTprintf("%d,%d,%d\n", (int)filtered_current0, (int)filtered_current4, (int)filtered_currentE);
+                // UARTprintf("%d,%d,%d\n", (int)power0, (int)power1, (int)powerE);
                 // Reset the counter and averages
                 counter = 0;
                 current0_avg = 0;
                 current4_avg = 0;
                 currentE_avg = 0;
+
+                
             }
         }
 
@@ -283,118 +289,118 @@ static void prvCurrentReadTask(void *pvParameters)
     }
 }
 
-static void prvEmergencyCheckTask(void *pvParameters)
-{
-    for (;;)
-    {
-        if (xSemaphoreTake(xEstop, portMAX_DELAY) == pdTRUE)
-        {
-            if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
-            {
+// static void prvEmergencyCheckTask(void *pvParameters)
+// {
+//     for (;;)
+//     {
+//         if (xSemaphoreTake(xEstop, portMAX_DELAY) == pdTRUE)
+//         {
+//             if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
+//             {
 
-                motor_ctrl.Estop = true;
-                // UARTprintf("\nMotor disabled\n");
-                motor_ctrl.motor_enabled = false;
-                motor_ctrl.pwm = 1;
-                motor_ctrl.stall_counter = STALL_VAL + 1;
-                motor_ctrl.target_rpm = 0;
-                disableMotor();
-                xSemaphoreGive(motor_ctrl.mutex);
-            }
-            UARTprintf("Emergency stop Triggered\n");
-        }
-    }
-}
+//                 motor_ctrl.Estop = true;
+//                 // UARTprintf("\nMotor disabled\n");
+//                 motor_ctrl.motor_enabled = false;
+//                 motor_ctrl.pwm = 1;
+//                 motor_ctrl.stall_counter = STALL_VAL + 1;
+//                 motor_ctrl.target_rpm = 0;
+//                 disableMotor();
+//                 xSemaphoreGive(motor_ctrl.mutex);
+//             }
+//             UARTprintf("Emergency stop Triggered\n");
+//         }
+//     }
+// }
 
-static void prvEmergencyAckTask(void *pvParameters)
-{
-    for (;;)
-    {
-        if (xSemaphoreTake(xEstopAcknowledge, portMAX_DELAY) == pdTRUE)
-        {
-            if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
-            {
-                motor_ctrl.Estop = false;
-                motor_ctrl.motor_enabled = true;
-                motor_ctrl.stall_counter = 0;
-                motor_ctrl.pwm = 50; // 50%
-                motor_ctrl.target_rpm = 1000;
-                getHallSensorValues(motor_ctrl.hall_sensor_values);
-                updateMotor(motor_ctrl.hall_sensor_values[0],
-                            motor_ctrl.hall_sensor_values[1],
-                            motor_ctrl.hall_sensor_values[2]);
+// static void prvEmergencyAckTask(void *pvParameters)
+// {
+//     for (;;)
+//     {
+//         if (xSemaphoreTake(xEstopAcknowledge, portMAX_DELAY) == pdTRUE)
+//         {
+//             if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
+//             {
+//                 motor_ctrl.Estop = false;
+//                 motor_ctrl.motor_enabled = true;
+//                 motor_ctrl.stall_counter = 0;
+//                 motor_ctrl.pwm = 50; // 50%
+//                 motor_ctrl.target_rpm = 1000;
+//                 getHallSensorValues(motor_ctrl.hall_sensor_values);
+//                 updateMotor(motor_ctrl.hall_sensor_values[0],
+//                             motor_ctrl.hall_sensor_values[1],
+//                             motor_ctrl.hall_sensor_values[2]);
 
-                motor_ctrl.duty_value = PWM_TO_DUTY(motor_ctrl.period_value, motor_ctrl.pwm);
-                setDuty(motor_ctrl.duty_value);
-                enableMotor();
-                xSemaphoreGive(motor_ctrl.mutex);
-            }
-            UARTprintf("Emergency stop acknowledged\n");
-        }
-    }
-}
+//                 motor_ctrl.duty_value = PWM_TO_DUTY(motor_ctrl.period_value, motor_ctrl.pwm);
+//                 setDuty(motor_ctrl.duty_value);
+//                 enableMotor();
+//                 xSemaphoreGive(motor_ctrl.mutex);
+//             }
+//             UARTprintf("Emergency stop acknowledged\n");
+//         }
+//     }
+// }
 
-static void prvButtonTask(void *pvParameters)
-{
-    /*
-     * Button task
-     * This task is responsible for handling the button presses and updating
-     * the motor speed and direction accordingly. It uses a semaphore to
-     * synchronize with the button interrupt handler.
-     * This is primarily for testing purposes in the place of an Actual UI
-     */
-    for (;;)
-    {
-        // only runs if the timer indicates and update has occured
-        if (xSemaphoreTake(xButton1Semaphore, portMAX_DELAY) == pdPASS)
-        {
-            // UARTprintf("Button task started\n");
-            if ((ui32ButtonStatus & USR_SW1) == USR_SW1)
-            {
-                if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
-                {
-                    if ((motor_ctrl.rpm - BUTTON_RPM_INCREMENT) <= 1)
-                    {
-                        xSemaphoreGive(xEstop);
-                    }
-                    else
-                    {
-                        motor_ctrl.target_rpm -= BUTTON_RPM_INCREMENT;
-                    }
-                    xSemaphoreGive(motor_ctrl.mutex);
-                }
-                g_pui32ButtonPressed = USR_SW1;
-            }
-            else if ((ui32ButtonStatus & USR_SW2) == USR_SW2)
-            {
-                if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
-                {
-                    if (motor_ctrl.motor_enabled == false)
-                    {
-                        xSemaphoreGive(xEstopAcknowledge);
-                    }
-                    // prevents the duty cycle from going out of range
-                    // Prevents the pwm from going past 100%
-                    else if ((motor_ctrl.pwm + BUTTON_DUTY_INCREMENT) >= 96)
-                    {
-                        // Safety feature
-                        UARTprintf("\nDUTY VALUE MAXED OUT\n");
+// static void prvButtonTask(void *pvParameters)
+// {
+//     /*
+//      * Button task
+//      * This task is responsible for handling the button presses and updating
+//      * the motor speed and direction accordingly. It uses a semaphore to
+//      * synchronize with the button interrupt handler.
+//      * This is primarily for testing purposes in the place of an Actual UI
+//      */
+//     for (;;)
+//     {
+//         // only runs if the timer indicates and update has occured
+//         if (xSemaphoreTake(xButtonSemaphore, portMAX_DELAY) == pdPASS)
+//         {
+//             // UARTprintf("Button task started\n");
+//             if ((ui32ButtonStatus & USR_SW1) == USR_SW1)
+//             {
+//                 if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
+//                 {
+//                     if ((motor_ctrl.rpm - BUTTON_RPM_INCREMENT) <= 1)
+//                     {
+//                         xSemaphoreGive(xEstop);
+//                     }
+//                     else
+//                     {
+//                         motor_ctrl.target_rpm -= BUTTON_RPM_INCREMENT;
+//                     }
+//                     xSemaphoreGive(motor_ctrl.mutex);
+//                 }
+//                 g_pui32ButtonPressed = USR_SW1;
+//             }
+//             else if ((ui32ButtonStatus & USR_SW2) == USR_SW2)
+//             {
+//                 if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
+//                 {
+//                     if (motor_ctrl.motor_enabled == false)
+//                     {
+//                         xSemaphoreGive(xEstopAcknowledge);
+//                     }
+//                     // prevents the duty cycle from going out of range
+//                     // Prevents the pwm from going past 100%
+//                     else if ((motor_ctrl.pwm + BUTTON_DUTY_INCREMENT) >= 96)
+//                     {
+//                         // Safety feature
+//                         UARTprintf("\nDUTY VALUE MAXED OUT\n");
 
-                        // Sends the motor down to a slightly safer value
-                        motor_ctrl.pwm = 90;
-                    }
-                    else
-                    {
-                        motor_ctrl.target_rpm += BUTTON_RPM_INCREMENT; // Increase target RPM
-                    }
-                    // UARTprintf("Duty value %d\n", motor_ctrl.duty_value);
-                    xSemaphoreGive(motor_ctrl.mutex);
-                }
-                g_pui32ButtonPressed = USR_SW2;
-            }
-        }
-    }
-}
+//                         // Sends the motor down to a slightly safer value
+//                         motor_ctrl.pwm = 90;
+//                     }
+//                     else
+//                     {
+//                         motor_ctrl.target_rpm += BUTTON_RPM_INCREMENT; // Increase target RPM
+//                     }
+//                     // UARTprintf("Duty value %d\n", motor_ctrl.duty_value);
+//                     xSemaphoreGive(motor_ctrl.mutex);
+//                 }
+//                 g_pui32ButtonPressed = USR_SW2;
+//             }
+//         }
+//     }
+// }
 
 static void prvMotorPIDTask(void *parameters)
 {
@@ -418,21 +424,26 @@ static void prvMotorPIDTask(void *parameters)
     const float max_accel_delta = (MAX_ACCELERATION_RPMS * dt);
     /* consider only regular deceleration for now */
     const float max_decel_delta = (MAX_DECELERATION_RPMS * dt);
+    float raw_rpm = 0;
+    float local_target_rpm;
+    uint32_t local_period;
     prvMotorStart();
-
+    
     for (;;)
     {
         if (xSemaphoreTake(xPIDTimerSemaphore, pdMS_TO_TICKS(2000)) != pdTRUE)
             continue;
 
         taskENTER_CRITICAL();
-        float raw_rpm = 0;
+
         /* clear stale data */
         if ((last_hall_update - xTaskGetTickCount()) > pdMS_TO_TICKS(800))
         {
             raw_rpm = 0;
         }
         raw_rpm = latest_rpm;
+        local_target_rpm = motor_ctrl.target_rpm;
+        local_period = motor_ctrl.period_value;
         taskEXIT_CRITICAL();
         rpm_sum -= rpm_buffer[rpm_index];
         rpm_buffer[rpm_index] = raw_rpm;
@@ -450,19 +461,7 @@ static void prvMotorPIDTask(void *parameters)
         float avg_acceleration = accel_sum / (float)MOVING_AVERAGE_SAMPLES;
         /* clamp local target rpm to prevent overshooting acceleration */
 
-        float local_target_rpm;
-        uint32_t local_period;
-        if (xSemaphoreTake(motor_ctrl.mutex, pdMS_TO_TICKS(20)) == pdTRUE)
-        {
-            local_target_rpm = motor_ctrl.target_rpm;
-            local_period = motor_ctrl.period_value;
-            xSemaphoreGive(motor_ctrl.mutex);
-        }
-        else
-        {
-            local_target_rpm = 0.0f;
-            local_period = motor_ctrl.period_value;
-        }
+
 
         if ((local_target_rpm - ramped_target_rpm) > max_accel_delta)
         {
@@ -475,7 +474,8 @@ static void prvMotorPIDTask(void *parameters)
         else
         {
             ramped_target_rpm = local_target_rpm;
-        }
+            /* use actual rpm to as reference now */
+        } 
 
         /* PID loop */
         float error = ramped_target_rpm - rpm;
@@ -499,11 +499,11 @@ static void prvMotorPIDTask(void *parameters)
         if (need_disable)
             disableMotor();
 
-        // UARTprintf("RPM: %d, Target: %d, AvgAccel: %d, Ramped Target RPM: %d\n",
-        //            (int)rpm,
-        //            (int)local_target_rpm,
-        //            (int)avg_acceleration,
-        //            (int)ramped_target_rpm);
+        UARTprintf("RPM: %d, Target: %d, AvgAccel: %d, Ramped Target RPM: %d\n",
+                   (int)rpm,
+                   (int)local_target_rpm,
+                   (int)avg_acceleration,
+                   (int)ramped_target_rpm);
     }
 }
 
@@ -526,7 +526,7 @@ void HallSensorHandler(void)
     GPIOIntClear(GPIO_PORTM_BASE, ui32StatusM);
     GPIOIntClear(GPIO_PORTH_BASE, ui32StatusH);
     GPIOIntClear(GPIO_PORTN_BASE, ui32StatusN);
-
+    count++;
     last_hall_update = xTaskGetTickCountFromISR();
     uint32_t tick_delta = last_hall_update - last_tick;
     last_tick = last_hall_update;
@@ -535,7 +535,7 @@ void HallSensorHandler(void)
     int tmp[3] = {0, 0, 0};
     getHallSensorValues(tmp);
     updateMotor(tmp[0], tmp[1], tmp[2]);
-    xSemaphoreGiveFromISR(xPowerMotorCalcsemaphore, &xMotorTaskWoken);
+    // xSemaphoreGiveFromISR(xPowerMotorCalcsemaphore, &xMotorTaskWoken);
 }
 // void xButtonsHandler(void)
 // {
@@ -558,7 +558,7 @@ void HallSensorHandler(void)
 //     {
 //         /* This FreeRTOS API call will handle the context switch if it is
 //          * required or have no effect if that is not needed. */
-//         xSemaphoreGiveFromISR(xButton1Semaphore, &xButtonTaskWoken);
+//         xSemaphoreGiveFromISR(xButtonSemaphore, &xButtonTaskWoken);
 //         portYIELD_FROM_ISR(xButtonTaskWoken);
 //     }
 
@@ -597,7 +597,7 @@ void prvMotorStart()
     }
 
     // configure buttons
-    prvConfigureButton();
+    // prvConfigureButton();
     if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
     {
         motor_ctrl.pwm = 50;
@@ -635,4 +635,17 @@ void prvMotorStart()
         // Handle error
         UARTprintf("Failed to take mutex\n");
     }
+}
+
+void ADC1IntHandler(void)
+{
+    /*
+     * ADC1 interrupt handler
+     * This function is called when the ADC1 interrupt is triggered.
+     * It clears the interrupt and updates the motor phase based on the hall sensor values.
+     */
+    // Clear the ADC interrupt
+    ADCIntClear(ADC1_BASE, 1);
+    // Trigger the current read task
+    xSemaphoreGiveFromISR(xPowerMotorCalcsemaphore, NULL);
 }
