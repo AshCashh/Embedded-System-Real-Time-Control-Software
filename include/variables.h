@@ -5,6 +5,7 @@
 #include "queue.h"
 #include "semphr.h"
 #include "math.h"
+#include "event_groups.h"
 /* Defines for motor ctrl */
 
 #define INHA GPIO_PORTF_BASE, GPIO_PIN_1
@@ -74,9 +75,16 @@ static inline float count_to_rpm(int count)
 }
 #define MOVING_AVERAGE_SAMPLES 60
 /* PID variables */
-#define Kp 0.4f
-#define Ki 2.2f 
-#define Kd 0.3f
+#define Kp 0.008f
+#define Ki 0.008f 
+#define Kd 0.8f
+
+/* Event bits */
+#define EVENT_HIGH_THRESHOLD (1 << 0)
+#define EVENT_LOW_THRESHOLD (1 << 1)
+#define EVENT_BTN_TOGGLE (1 << 2)
+#define LOW_THRESHOLD 5
+extern EventGroupHandle_t xEventGroup;
 
 #define dt 1/PID_FREQUENCY 
 #define EPSILON 1e-6f
@@ -149,16 +157,13 @@ typedef struct
     float pwm; /* PWM percentage 0-100 */
     volatile uint16_t duty_value; /* current duty cycle value */
     uint16_t period_value; /* current period value */
-    uint32_t hall_currents[3]; /* hall sensor currents */
     bool motor_enabled; /* stall prevention flag */
     bool brake; /* brake flag */
     bool Estop; /* emergency stop flag */
-    uint8_t stall_counter; /* reactivation count */
     float rpm; /* current rpm value */
     float target_rpm; /* target rpm value */
     int32_t acceleration; /* current acceleration value */
-    uint32_t hall_sensor_values[3]; /* hall sensor values */
-    /* timestamp */
-    uint32_t timestamp; /* timestamp for hall sensor */
+    uint32_t current_limit; /* current limit in mA */
+    uint32_t acceleration_limit; /* acceleration limit in mA/s */
 } motorcontrol_t;
 

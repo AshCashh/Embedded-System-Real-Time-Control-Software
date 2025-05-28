@@ -10,6 +10,7 @@
         "utility": "c",
         "istream": "c",
         "streambuf": "c",
-        "common.h": "c"
+        "common.h": "c",
+        "variables.h": "c"
     }
 }

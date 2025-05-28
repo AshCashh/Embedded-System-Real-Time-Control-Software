@@ -31,7 +31,7 @@ extern "C" {
     * 
     *  @returns hall_a, hall_b, hall_c
 */
-bool getHallSensorValues(int32_t* halls);
+uint8_t getHallSensorValues();
 
 
 /*!
@@ -59,7 +59,7 @@ void setDuty(float duty);
  *  @param  Hall_c         current value of the Hall C effect sensor as a bool (0 or 1)
  * *
  */
-void updateMotor(bool Hall_a, bool Hall_b, bool Hall_c);
+void updateMotor();
 
 
 /*!

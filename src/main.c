@@ -148,6 +148,7 @@ QueueHandle_t xPointerQueue = NULL;
 QueueHandle_t xLightQueue = NULL;
 QueueHandle_t xAccelQueue = NULL;
 QueueHandle_t xMotorRPMQueue = NULL;
+QueueHandle_t xPowerQueue = NULL;
 
 EventGroupHandle_t xEventGroup = NULL;
 /*-----------------------------------------------------------*/
@@ -197,10 +198,22 @@ int main(void)
         /* Size of each item is big enough to hold only a
         pointer. */
         sizeof(AMessage));
+    xPowerQueue = xQueueCreate(
+        /* The number of items the queue can hold. */
+        mainQUEUE_LENGTH,
+        /* Size of each item is big enough to hold only a
+        pointer. */
+        sizeof(AMessage));
 
-    if ((xLightQueue == NULL) || (xPointerQueue == NULL) || (xAccelQueue == NULL) || (xMotorRPMQueue == NULL))
+    if ((xLightQueue == NULL) || (xPointerQueue == NULL) || (xAccelQueue == NULL) || (xMotorRPMQueue == NULL) || 
+        (xPowerQueue == NULL))
     {
+        /* The queue was not created and must not be used. */
         UARTprintf("Queue creation failed\n");
+    }
+    else
+    {
+        UARTprintf("Queues created successfully\n");
     }
 
     /* Create the binary semaphore used to synchronize the button ISR and the

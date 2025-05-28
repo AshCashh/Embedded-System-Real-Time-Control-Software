@@ -22,17 +22,20 @@ bool initMotorLib(uint16_t pwm_period)
     return true;
 }
 
-bool getHallSensorValues(int32_t* halls)
+uint8_t getHallSensorValues()
 {
     // UARTprintf("getHallSensorValues\n");
     /*
         read hall values, returns pin number if high and 0 if low,
         format the data to 1 and 0 by shifting
     */
-    halls[0] = GPIOPinRead(HALLA) >> 3;  
-    halls[1] = GPIOPinRead(HALLB) >> 2;  
-    halls[2] = GPIOPinRead(HALLC) >> 2;  
-    return true;  
+    int tmp[3] = {0, 0, 0};
+    tmp[0] = GPIOPinRead(HALLA) >> 3;  
+    tmp[1] = GPIOPinRead(HALLB) >> 2;  
+    tmp[2] = GPIOPinRead(HALLC) >> 2;
+    uint8_t halls = BITS_TO_PHASE(tmp[0], tmp[1], tmp[2]);
+
+    return halls;  
 }
 
 void setDuty(float duty)
@@ -41,10 +44,11 @@ void setDuty(float duty)
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1,  (int)(SysCtlClockGet() * (float)(duty / 1000000.0f)));
 }
 
-void updateMotor(bool Hall_a, bool Hall_b, bool Hall_c)
+void updateMotor()
 {
+    uint8_t current_phase = getHallSensorValues();
     uint8_t phase;
-    switch (BITS_TO_PHASE(Hall_a, Hall_b, Hall_c))
+    switch (current_phase)
     {
         case PHASE_1:
             // UARTprintf("PHASE_1, Updating to (%d,%d,%d)\n", PHASE_TO_BITS(PHASE_2));

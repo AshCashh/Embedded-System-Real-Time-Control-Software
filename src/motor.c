@@ -330,8 +330,8 @@ static void prvCurrentReadTask(void *pvParameters)
             xMessage.uFiltered = (uint32_t)(power_filtered * 1000); // Convert to mA
             xMessage.uRaw = (uint32_t)(power_raw * 1000);           // Convert to mA
             xMessage.ulTimeStamp = xTaskGetTickCount();
-
-            if (xQueueSend(xMotorRPMQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
+            // UARTprintf("Sending message\n");
+            if (xQueueSend(xPowerQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
             {
                 // UARTprintf("Current sent: %d\n", xMessage.uRaw);
             }
@@ -401,6 +401,7 @@ static void prvMotorPIDTask(void *parameters)
             enableMotor();
         }
         /* if estop set deceleration rate to be estop */
+        max_decel_delta = (MAX_DECELERATION_RPMS * dt);
         if (motor_ctrl.Estop)
         {
             max_decel_delta = (ESTOP_DECELERATION_RPMS * dt);
@@ -420,33 +421,25 @@ static void prvMotorPIDTask(void *parameters)
         accel_index = (accel_index + 1) % MOVING_AVERAGE_SAMPLES;
         float avg_acceleration = accel_sum / (float)MOVING_AVERAGE_SAMPLES;
         /* clamp local target rpm to prevent overshooting acceleration */
-        /* Clamp ramped target to enforce max acceleration relative to actual RPM */
-        float delta_rpm = local_target_rpm - rpm;
-
-        if (delta_rpm > max_accel_delta)
+        
+        if ((local_target_rpm - ramped_target_rpm) > max_accel_delta)
         {
-            ramped_target_rpm = rpm + max_accel_delta;
+            ramped_target_rpm += max_accel_delta;
         }
-        else if (delta_rpm < -max_decel_delta)
+        else if ((local_target_rpm - ramped_target_rpm) < -max_decel_delta)
         {
-            ramped_target_rpm = rpm - max_decel_delta;
+            ramped_target_rpm -= max_decel_delta;
         }
         else
         {
             ramped_target_rpm = local_target_rpm;
-        }
+            /* use actual rpm to as reference now */
+        } 
 
         /* send rpm in queue */
         xMessage.ulTimeStamp = xTaskGetTickCount();
-        xMessage.uFiltered = (uint32_t)(rpm);
-        xMessage.uRaw = (uint32_t)(raw_rpm);
-        if (xQueueSend(xMotorRPMQueue, (void *)&xMessage, (TickType_t)0) != pdPASS)
-            ;
-        {
-        }
         /* PID loop */
         error = ramped_target_rpm - rpm;
-        // if (fabs(ramped_target_rpm - local_target_rpm) < (local_target_rpm * 0.10f)) {setDuty(PWM_TO_DUTY(local_period, u)); continue;} // If the target RPM is within 5% of the local target RPM, skip PID control
         integral += error * dt;                           // Integral term
         derivative = (error - error_prev) / dt;           // Derivative term
         u = Kp * error + Ki * integral + Kd * derivative; // PID control signal
@@ -467,8 +460,14 @@ static void prvMotorPIDTask(void *parameters)
         setDuty(local_duty);
         // if (need_disable)
         //     disableMotor();
-        // UARTprintf("%d, %d,  %d,  %d,  %d\n",
-        //            (int)rpm, (int)local_target_rpm, (int)local_duty, (int)avg_acceleration, (int)error);
+        xMessage.uFiltered = (uint32_t)(rpm);
+        xMessage.uRaw = (uint32_t)(raw_rpm);
+        if (xQueueSend(xMotorRPMQueue, (void *)&xMessage, (TickType_t)0) != pdPASS)
+            ;
+        {
+        }
+        // UARTprintf("%d, %d,  %d, %d, %d\n",
+        //            (int)rpm, (int)raw_rpm, (int)local_target_rpm, (int)ramped_target_rpm, (int)avg_acceleration);
     }
 }
 
@@ -498,9 +497,7 @@ void HallSensorHandler(void)
     float minute_delta = TICKS_TO_MINUTES(tick_delta);
     if (minute_delta > 0)
         latest_rpm = 1 / (COUNT_PER_REVOLUTION * minute_delta);
-    int tmp[3] = {0, 0, 0};
-    getHallSensorValues(tmp);
-    updateMotor(tmp[0], tmp[1], tmp[2]);
+    updateMotor();
     // xSemaphoreGiveFromISR(xPowerMotorCalcsemaphore, &xMotorTaskWoken);
 }
 
@@ -539,13 +536,12 @@ void prvMotorStart()
     if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
     {
         motor_ctrl.pwm = 50;
-        motor_ctrl.target_rpm = 2000;
+        // motor_ctrl.target_rpm = 2000;
         /* Initialise the motors and set the duty cycle (speed) in microseconds */
         initMotorLib(motor_ctrl.period_value);
         motor_ctrl.duty_value = PWM_TO_DUTY(motor_ctrl.period_value, motor_ctrl.pwm);
         setDuty(motor_ctrl.duty_value);
-        motor_ctrl.motor_enabled = true;
-        motor_ctrl.stall_counter = 0;
+        motor_ctrl.motor_enabled = false;
         motor_ctrl.acceleration = 0;
         xSemaphoreGive(motor_ctrl.mutex);
     }
@@ -562,10 +558,7 @@ void prvMotorStart()
     // UARTprintf("Getting hall values\n");
     if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
     {
-        getHallSensorValues(motor_ctrl.hall_sensor_values);
-        updateMotor(motor_ctrl.hall_sensor_values[0],
-                    motor_ctrl.hall_sensor_values[1],
-                    motor_ctrl.hall_sensor_values[2]);
+        updateMotor();
         xSemaphoreGive(motor_ctrl.mutex);
     }
     else

@@ -86,6 +86,7 @@
 #include <stdbool.h>
 
 extern QueueHandle_t xMotorRPMQueue;
+extern QueueHandle_t xPowerQueue;
 extern motorcontrol_t motor_ctrl;
 
 #define RPM_MIN 0
@@ -387,6 +388,11 @@ void OnLimitSliderChange(tWidget *psWidget, int32_t i32Value)
         current_threshold = i32Value;
         usprintf(pcText, "Current: %d mA", i32Value);
         SliderTextSet(&g_psLimitSliders[0], pcText);
+        if (xSemaphoreTake(motor_ctrl.mutex, pdMS_TO_TICKS(100)) == pdTRUE)
+        {
+            motor_ctrl.current_limit = i32Value;
+            xSemaphoreGive(motor_ctrl.mutex);
+        }
     }
     else if (psWidget == (tWidget *)&g_psLimitSliders[1])
     {
@@ -395,6 +401,11 @@ void OnLimitSliderChange(tWidget *psWidget, int32_t i32Value)
         xSemaphoreGive(xEmergencyMutex);
         usprintf(pcText, "Acceleration: %d ms^-2", i32Value);
         SliderTextSet(&g_psLimitSliders[1], pcText);
+        if (xSemaphoreTake(motor_ctrl.mutex, pdMS_TO_TICKS(100)) == pdTRUE)
+        {
+            motor_ctrl.acceleration_limit = i32Value;
+            xSemaphoreGive(motor_ctrl.mutex);
+        }
     }
     WidgetPaint(psWidget);
 }
@@ -630,6 +641,21 @@ void OnPlotSelectButton(tWidget *psWidget)
     {
         g_eCurrentPlot = PLOT_POWER;
         PushButtonFillColorSet(&g_sPlotBtnPower, ClrYellow);
+        // Reset the buffer and index for new plot
+        for (uint32_t i = 0; i < POWER_DATA_BUFFER_SIZE; i++)
+            g_ui32PowerDataBuffer[i] = 0;
+        g_ui32PowerDataIndex = 0;
+        // Reset the power data count
+        g_ui32PowerDataCount = 0;
+        g_bPowerPlotEnabled = true; // Enable plotting for power
+        // Draw axes and labels immediately
+        tRectangle sRect = {10, 40, 310, 180};
+        GrContextForegroundSet(&sContext, ClrBlack);
+        GrRectFill(&sContext, &sRect);
+        GrContextForegroundSet(&sContext, ClrWhite);
+        GrLineDraw(&sContext, 10, 180, 310, 180); // X-axis
+        GrLineDraw(&sContext, 10, 40, 10, 180);   // Y-axis
+        
         // (reset power buffer here if you add it)
     }
 
@@ -1012,6 +1038,24 @@ void OnCanvasPaint(tWidget *psWidget, tContext *psContext)
         GrLineDraw(psContext, 10, 175, 310, 175);    // X-axis
         GrLineDraw(psContext, 10, 40, 10, 175);      // Y-axis
     }
+    if (g_eCurrentPlot == PLOT_RPM && g_ui32RPMDataCount == 0)
+    {
+        // Draw axes and labels only
+        GrContextForegroundSet(psContext, ClrBlack); // Use black, not pink
+        GrRectFill(psContext, &sRect);
+        GrContextForegroundSet(psContext, ClrWhite); // Use white for axes
+        GrLineDraw(psContext, 10, 175, 310, 175);    // X-axis
+        GrLineDraw(psContext, 10, 40, 10, 175);      // Y-axis
+    }
+    if (g_eCurrentPlot == PLOT_POWER && g_ui32PowerDataCount == 0)
+    {
+        // Draw axes and labels only
+        GrContextForegroundSet(psContext, ClrBlack); // Use black, not pink
+        GrRectFill(psContext, &sRect);
+        GrContextForegroundSet(psContext, ClrWhite); // Use white for axes
+        GrLineDraw(psContext, 10, 175, 310, 175);    // X-axis
+        GrLineDraw(psContext, 10, 40, 10, 175);      // Y-axis
+    }
 }
 
 //*****************************************************************************
@@ -1354,6 +1398,21 @@ static void prvDisplayTask(void *pvParameters)
                 //UARTprintf("No RPM Data received\n");
             }
         }
+        if (g_ui32Panel == 2 && g_eCurrentPlot == PLOT_POWER && g_bPowerPlotEnabled)
+        {
+            if (xQueueReceive(xPowerQueue, &xRxedStructure, (TickType_t)10) == pdPASS)
+            {
+                g_ui32PowerDataBuffer[g_ui32PowerDataIndex] = xRxedStructure.uRaw;
+                g_ui32PowerDataIndex = (g_ui32PowerDataIndex + 1) % POWER_DATA_BUFFER_SIZE;
+                if (g_ui32PowerDataCount < POWER_DATA_BUFFER_SIZE)
+                    g_ui32PowerDataCount++;
+                vSensorData(g_ui32PowerDataBuffer, g_ui32PowerDataCount, PLOT_POWER, plotRawData);
+            }
+            else
+            {
+                //UARTprintf("No Power Data received\n");
+            }
+        }
     }
 }
 static void vSensorData(uint32_t *data, int dataSize, PlotType plotType, bool filtered)
@@ -1435,6 +1494,10 @@ static void vSensorData(uint32_t *data, int dataSize, PlotType plotType, bool fi
         case PLOT_RPM:
             g_ui32RPMDataIndex = 1;
             g_ui32RPMDataCount = 1;
+            break;
+        case PLOT_POWER:
+            g_ui32PowerDataIndex = 1;
+            g_ui32PowerDataCount = 1;
             break;
         default:
             break;
