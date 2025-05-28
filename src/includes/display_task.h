@@ -11,3 +11,4 @@ void xTimerHandler(void);
 #endif // DISPLAY_TASK_H
 
 static uint32_t accel_threshold = 100;
+static uint32_t current_threshold = 100;
