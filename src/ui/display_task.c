@@ -138,6 +138,7 @@ extern tCanvasWidget g_sCanvas1;
 uint32_t g_ui32SysClock;
 tContext sContext;
 Motor_t Motor;
+
 uint32_t luxValue = 10;
 
 
@@ -301,7 +302,13 @@ OnRpmChange(tWidget *psWidget, int32_t i32Value)
     static char pcText[5];
 
     // 1) Apply to your motor data
-    Motor.desired_rpm = i32Value;
+    // Motor.desired_rpm = i32Value;
+    if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
+    {
+        motor_ctrl.target_rpm = (float)i32Value;
+        Motor.desired_rpm = i32Value;
+        xSemaphoreGive(motor_ctrl.mutex);
+    }
 
     // 2) Update the slider label
     usprintf(pcText, "%3d", i32Value);
@@ -1104,10 +1111,25 @@ void OnButtonPress(tWidget *psWidget)
     // Start button: only works if not in ESTOP
     if (psWidget == (tWidget *)&g_sStartButton)
     {
-        if (Motor.MotorState != ESTOP)
+        // if (Motor.MotorState != ESTOP)
+        // {
+        //     Motor.MotorState = RUNNING;
+        //     WidgetPaint((tWidget *)&g_sDashboard);
+        // }
+        if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
         {
-            Motor.MotorState = RUNNING;
-            WidgetPaint((tWidget *)&g_sDashboard);
+            if (!motor_ctrl.Estop)
+            {
+                motor_ctrl.Estop = false; // Clear E-STOP state
+                motor_ctrl.motor_enabled = true; // Enable motor
+                Motor.MotorState = RUNNING; // Set motor state to RUNNING
+                WidgetPaint((tWidget *)&g_sDashboard);
+            }
+            xSemaphoreGive(motor_ctrl.mutex);
+        }
+        else
+        {
+            // Failed to take mutex, handle error if needed
         }
         return;
     }
@@ -1145,6 +1167,16 @@ void OnButtonPress(tWidget *psWidget)
             PushButtonFillOn(&g_sEStopButton);
             PushButtonTextOn(&g_sEStopButton);
             WidgetPaint((tWidget *)&g_sEStopButton);
+        }
+        if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
+        {
+            motor_ctrl.Estop = (Motor.MotorState == ESTOP); // Update E-STOP state
+            motor_ctrl.motor_enabled = (Motor.MotorState != ESTOP); // Disable motor if in E-STOP
+            xSemaphoreGive(motor_ctrl.mutex);
+        }
+        else
+        {
+            // Failed to take mutex, handle error if needed
         }
         WidgetPaint((tWidget *)&g_sDashboard);
         return;
@@ -1356,7 +1388,7 @@ static void prvDisplayTask(void *pvParameters)
                 g_ui32RPMDataIndex = (g_ui32RPMDataIndex + 1) % RPM_DATA_BUFFER_SIZE;
                 if (g_ui32RPMDataCount < RPM_DATA_BUFFER_SIZE)
                     g_ui32RPMDataCount++;
-                vSensorData(g_ui32RPMDataBuffer, g_ui32RPMDataCount, PLOT_RPM, false);
+                    vSensorData(g_ui32RPMDataBuffer, g_ui32RPMDataCount, PLOT_RPM, plotRawData);
             }
             else{
                 //UARTprintf("No RPM Data received\n");

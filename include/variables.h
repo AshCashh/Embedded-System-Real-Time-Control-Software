@@ -63,7 +63,7 @@
 
 #define SECONDS_PER_MINUTE 60
 
-#define ACCELERATION_TOLERANCE 0.85f
+#define ACCELERATION_TOLERANCE 0.95f
 #define MAX_ACCELERATION_RPMS (ACCELERATION_TOLERANCE * 500.0f) 
 #define MAX_DECELERATION_RPMS (ACCELERATION_TOLERANCE * 500.0f)
 #define ESTOP_DECELERATION_RPMS (ACCELERATION_TOLERANCE * 1000.0f)
@@ -74,9 +74,9 @@ static inline float count_to_rpm(int count)
 }
 #define MOVING_AVERAGE_SAMPLES 60
 /* PID variables */
-#define Kp 0.16 /* Proportional gain */
-#define Kd 0.06 /* Derivative gain */
-#define Ki 0.038  /* Integral gain */
+#define Kp 0.4f
+#define Ki 2.2f 
+#define Kd 0.3f
 
 #define dt 1/PID_FREQUENCY 
 #define EPSILON 1e-6f
@@ -86,7 +86,6 @@ static inline float clamp(float value, float min, float max)
     return fminf(fmaxf(value, min), max);
 }
 
-#define BUTTON_RPM_INCREMENT 100 // RPM increment for button press
 /* 
     Commutation phases for 3 phase BLDC with INHC = 1
     Phase F loops back to phase A per revolution 
