@@ -170,7 +170,7 @@ void vCreateMotorTask(void)
 float estimate_instantaneous_power(float i_a, float i_b)
 {
     float i_c = -(i_a + i_b);
-    float i_rms_equiv = sqrtf((i_a * i_a + i_b * i_b + i_c * i_c) / 3.0f);
+    float i_rms_equiv = 1.732f * sqrtf((i_a * i_a + i_b * i_b + i_c * i_c));
     return MOTOR_NORMAL_VOLTAGE * i_rms_equiv;
 }
 
@@ -268,21 +268,21 @@ static void prvCurrentReadTask(void *pvParameters)
 
             power_raw = (power_raw0 + power_raw1 + power_rawE); // Average raw power in Watts
 
-            // if (large_count > ADC_CURRENT_SAMPLES_AVERAGE_FIX)
-            // {
-            //     // Reset the large count and averages
-            //     Static_point1 = Static_point1 + (Large_Current_1_Average / (float)ADC_CURRENT_SAMPLES_AVERAGE_FIX);
-            //     Static_point2 = Static_point2 + (Large_Current_2_Average / (float)ADC_CURRENT_SAMPLES_AVERAGE_FIX);
-            //     Static_point1 = clamp(Static_point1, -0.5f, 0.5f); // Clamp to reasonable values
-            //     Static_point2 = clamp(Static_point2, -0.5f, 0.5f); // Clamp to reasonable values
-            //     large_count = 0;
-            //     Large_Current_1_Average = 0.0f;
-            //     Large_Current_2_Average = 0.0f;
-            // }
-            // large_count++;
+            if (large_count > ADC_CURRENT_SAMPLES_AVERAGE_FIX)
+            {
+                // Reset the large count and averages
+                Static_point1 = Static_point1 + (Large_Current_1_Average / (float)ADC_CURRENT_SAMPLES_AVERAGE_FIX);
+                Static_point2 = Static_point2 + (Large_Current_2_Average / (float)ADC_CURRENT_SAMPLES_AVERAGE_FIX);
+                Static_point1 = clamp(Static_point1, -0.5f, 0.5f); // Clamp to reasonable values
+                Static_point2 = clamp(Static_point2, -0.5f, 0.5f); // Clamp to reasonable values
+                large_count = 0;
+                Large_Current_1_Average = 0.0f;
+                Large_Current_2_Average = 0.0f;
+            }
+            large_count++;
 
-            // Large_Current_1_Average = Large_Current_1_Average + raw_current0;
-            // Large_Current_2_Average = Large_Current_2_Average + raw_current4;
+            Large_Current_1_Average = Large_Current_1_Average + raw_current0;
+            Large_Current_2_Average = Large_Current_2_Average + raw_current4;
 
             if (current_index > ADC_CURRENT_SAMPLES)
             {
