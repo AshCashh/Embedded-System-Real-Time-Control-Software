@@ -90,7 +90,7 @@ extern QueueHandle_t xPowerQueue;
 extern motorcontrol_t motor_ctrl;
 
 #define RPM_MIN 0
-#define RPM_MAX 5000
+#define RPM_MAX 3000
 uint32_t accel_threshold;
 uint32_t current_threshold;
 //*****************************************************************************
@@ -127,7 +127,6 @@ uint32_t g_ui32RPMDataIndex = 0;
 #define POWER_DATA_BUFFER_SIZE 100
 uint32_t g_ui32PowerDataBuffer[POWER_DATA_BUFFER_SIZE] = {0};
 uint32_t g_ui32PowerDataIndex = 0;
-
 
 uint32_t g_ui32AccelDataCount = 0;
 uint32_t g_ui32RPMDataCount = 0;
@@ -356,7 +355,7 @@ tSliderWidget g_psLimitSliders[] = {
                  &g_sFontCm20, "Current Threshold:", 0, 0, OnLimitSliderChange),
     // Acceleration Threshold
     SliderStruct(g_psPanels + 1, 0, 0, &g_sKentec320x240x16_SSD2119,
-                 20, 100, 280, 30, 0, 25, 10, // x, y, width, height, 
+                 20, 100, 280, 30, 0, 25, 10, // x, y, width, height,
                  (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
                  ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
                  &g_sFontCm20, "Acceleration Threshold:", 0, 0, OnLimitSliderChange),
@@ -482,7 +481,7 @@ tSliderWidget g_psRpmSlider[] = {
     SliderStruct(
         g_psPanels, &g_sStartButton, 0, &g_sKentec320x240x16_SSD2119,
         70, 65 - 15, 200, 30,
-        0, 2500, 0,
+        0, RPM_MAX, 0,
         (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE |
          SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
         ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
@@ -515,7 +514,7 @@ tPushButtonWidget g_sPlotBtnLight = RectangularButtonStruct(
     g_psPanels + 2, &g_sPlotBtnAccel, 0, &g_sKentec320x240x16_SSD2119,
     25, 5, 70, 28, // x, y, width, height
     PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT,
-    ClrGray, ClrSilver, ClrWhite, ClrWhite, // colors : 
+    ClrGray, ClrSilver, ClrWhite, ClrWhite, // colors :
     &g_sFontCm18, "Light", 0, 0, 0, 0,
     OnPlotSelectButton);
 
@@ -635,7 +634,6 @@ void OnPlotSelectButton(tWidget *psWidget)
         GrContextForegroundSet(&sContext, ClrWhite);
         GrLineDraw(&sContext, 10, 180, 310, 180); // X-axis
         GrLineDraw(&sContext, 10, 40, 10, 180);   // Y-axis
-        
     }
     else if (psWidget == (tWidget *)&g_sPlotBtnPower)
     {
@@ -655,7 +653,7 @@ void OnPlotSelectButton(tWidget *psWidget)
         GrContextForegroundSet(&sContext, ClrWhite);
         GrLineDraw(&sContext, 10, 180, 310, 180); // X-axis
         GrLineDraw(&sContext, 10, 40, 10, 180);   // Y-axis
-        
+
         // (reset power buffer here if you add it)
     }
 
@@ -832,7 +830,8 @@ void OnNext(tWidget *psWidget)
     //
     WidgetAdd(WIDGET_ROOT, (tWidget *)(g_psPanels + g_ui32Panel));
     WidgetPaint((tWidget *)(g_psPanels + g_ui32Panel));
-    if (g_ui32Panel == 1) {
+    if (g_ui32Panel == 1)
+    {
         WidgetAdd((tWidget *)(g_psPanels + 1), (tWidget *)&g_sLimitSlidersCanvas);
         WidgetAdd((tWidget *)&g_sLimitSlidersCanvas, (tWidget *)&g_psLimitSliders[0]);
         WidgetAdd((tWidget *)&g_sLimitSlidersCanvas, (tWidget *)&g_psLimitSliders[1]);
@@ -1139,6 +1138,11 @@ void OnButtonPress(tWidget *psWidget)
         else
         {
             // ACK pressed, return to STOP and grey out E-STOP
+            if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
+            {
+                motor_ctrl.Estop = false; // Set E-Stop flag
+                xSemaphoreGive(motor_ctrl.mutex);
+            }
             Motor.MotorState = STOP;
             PushButtonTextSet(&g_sEStopButton, "E-STOP");
             PushButtonFillColorSet(&g_sEStopButton, ClrGray);
@@ -1153,20 +1157,20 @@ void OnButtonPress(tWidget *psWidget)
     {
         switch (Motor.MotorState)
         {
-            case ESTOP:
-                motor_ctrl.Estop = true; // Set E-Stop flag
-                motor_ctrl.motor_enabled = false; // Disable motor
-                break;
-            case STOP:
-                motor_ctrl.Estop = false; // Clear E-Stop flag
-                motor_ctrl.motor_enabled = false; // Disable motor
-                break;
-            case RUNNING:
-                motor_ctrl.Estop = false; // Clear E-Stop flag
-                motor_ctrl.motor_enabled = true; // Enable motor
-                break;
-            default:
-                break;
+        case ESTOP:
+            motor_ctrl.Estop = true;          // Set E-Stop flag
+            motor_ctrl.motor_enabled = false; // Disable motor
+            break;
+        case STOP:
+            motor_ctrl.Estop = false;         // Clear E-Stop flag
+            motor_ctrl.motor_enabled = false; // Disable motor
+            break;
+        case RUNNING:
+            motor_ctrl.Estop = false;        // Clear E-Stop flag
+            motor_ctrl.motor_enabled = true; // Enable motor
+            break;
+        default:
+            break;
         }
         xSemaphoreGive(motor_ctrl.mutex);
         return;
@@ -1312,10 +1316,16 @@ static void prvDisplayTask(void *pvParameters)
             plotRawData = !plotRawData;
             UARTprintf("Toggled plot mode: %s\n", plotRawData ? "Raw Data" : "Filtered Data");
         }
-        
+
         if (g_ui32Panel == 0 && uxBits & EVENT_ESTOP_TRIGGERED)
         {
             Motor.MotorState = ESTOP;
+            if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
+            {
+                motor_ctrl.Estop = true; // Set E-Stop flag
+                motor_ctrl.motor_enabled = false; // Disable motor
+                xSemaphoreGive(motor_ctrl.mutex);
+            }
             // Update E-STOP button appearance as before
             PushButtonTextSet(&g_sEStopButton, "ACK");
             PushButtonFillColorSet(&g_sEStopButton, ClrOrange);
@@ -1324,7 +1334,7 @@ static void prvDisplayTask(void *pvParameters)
             WidgetPaint((tWidget *)&g_sEStopButton);
             WidgetPaint((tWidget *)&g_sDashboard);
         }
-        
+
         // block until ISR gives semaphore
         if (xSemaphoreTake(xSemaphoreTimer0, portMAX_DELAY) == pdTRUE)
         {
@@ -1349,7 +1359,6 @@ static void prvDisplayTask(void *pvParameters)
             }
         }
 
-        
         if (g_ui32Panel == 2 && g_eCurrentPlot == PLOT_LIGHT && g_bLightPlotEnabled)
         {
             if (xQueueReceive(xLightQueue, &(xRxedStructure), (TickType_t)10) == pdPASS)
@@ -1361,7 +1370,7 @@ static void prvDisplayTask(void *pvParameters)
                 // print the buffer recieved data
                 // uint32_t prevIndex = (g_ui32LightDataIndex == 0) ? (LIGHT_DATA_BUFFER_SIZE - 1) : (g_ui32LightDataIndex - 1);
                 // UARTprintf("Light Data: %d, Count: %d\n", g_ui32LightDataBuffer[prevIndex], g_ui32LightDataCount);
-                //UARTprintf("%d, %d\n", xRxedStructure.uRaw, xRxedStructure.uFiltered);
+                // UARTprintf("%d, %d\n", xRxedStructure.uRaw, xRxedStructure.uFiltered);
                 vSensorData(g_ui32LightDataBuffer, g_ui32LightDataCount, PLOT_LIGHT, plotRawData);
             }
             else
@@ -1375,14 +1384,13 @@ static void prvDisplayTask(void *pvParameters)
             {
                 g_ui32AccelDataBuffer[g_ui32AccelDataIndex] = plotRawData ? xRxedStructure.uRaw : xRxedStructure.uFiltered;
                 g_ui32AccelDataIndex = (g_ui32AccelDataIndex + 1) % ACCEL_DATA_BUFFER_SIZE;
-                //uint32_t prevIndex = (g_ui32AccelDataIndex == 0) ? (ACCEL_DATA_BUFFER_SIZE - 1) : (g_ui32AccelDataIndex - 1);
-                //UARTprintf("%d, %d\n", xRxedStructure.uRaw, xRxedStructure.uFiltered);
+                // uint32_t prevIndex = (g_ui32AccelDataIndex == 0) ? (ACCEL_DATA_BUFFER_SIZE - 1) : (g_ui32AccelDataIndex - 1);
+                // UARTprintf("%d, %d\n", xRxedStructure.uRaw, xRxedStructure.uFiltered);
 
                 if (g_ui32AccelDataCount < ACCEL_DATA_BUFFER_SIZE)
                     g_ui32AccelDataCount++;
                 vSensorData(g_ui32AccelDataBuffer, g_ui32AccelDataCount, PLOT_ACCEL, plotRawData);
             }
-           
         }
         if (g_ui32Panel == 2 && g_eCurrentPlot == PLOT_RPM && g_bRPMPlotEnabled)
         {
@@ -1390,13 +1398,14 @@ static void prvDisplayTask(void *pvParameters)
             {
                 g_ui32RPMDataBuffer[g_ui32RPMDataIndex] = plotRawData ? xRxedStructure.uRaw : xRxedStructure.uFiltered;
                 g_ui32RPMDataIndex = (g_ui32RPMDataIndex + 1) % RPM_DATA_BUFFER_SIZE;
-                //UARTprintf("%d, %d\n", xRxedStructure.uRaw, xRxedStructure.uFiltered);
+                // UARTprintf("%d, %d\n", xRxedStructure.uRaw, xRxedStructure.uFiltered);
                 if (g_ui32RPMDataCount < RPM_DATA_BUFFER_SIZE)
                     g_ui32RPMDataCount++;
-                    vSensorData(g_ui32RPMDataBuffer, g_ui32RPMDataCount, PLOT_RPM, plotRawData);
+                vSensorData(g_ui32RPMDataBuffer, g_ui32RPMDataCount, PLOT_RPM, plotRawData);
             }
-            else{
-                //UARTprintf("No RPM Data received\n");
+            else
+            {
+                // UARTprintf("No RPM Data received\n");
             }
         }
         if (g_ui32Panel == 2 && g_eCurrentPlot == PLOT_POWER && g_bPowerPlotEnabled)
@@ -1411,7 +1420,7 @@ static void prvDisplayTask(void *pvParameters)
             }
             else
             {
-                //UARTprintf("No Power Data received\n");
+                // UARTprintf("No Power Data received\n");
             }
         }
     }
@@ -1441,7 +1450,7 @@ static void vSensorData(uint32_t *data, int dataSize, PlotType plotType, bool fi
         break;
     case PLOT_ACCEL:
         yMin = 0;
-        yMax = 10; 
+        yMax = 10;
         yScale = 1;
         yLabel = "ms^-2";
         xStep = 1;

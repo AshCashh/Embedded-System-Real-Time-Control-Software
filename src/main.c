@@ -230,50 +230,50 @@ int main(void)
     motor_ctrl.duty_value = PWM_TO_DUTY(motor_ctrl.period_value, motor_ctrl.pwm);
     motor_ctrl.brake = false;
 
-    // // MOTOR
-    // /* Configure motor pins */
-    // /* Configure ADC1 with ISENCE pins */
-    // SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC1);
-    // /* Enable GPIO ports for motor phases */
-    // SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
-    // SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOG);
-    // SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOC);
-    // SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOH);
-    // SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOM);
-    // SysCtlPeripheralEnable(SYSCTL_PERIPH_GPION);
-    // SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
-    // SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOD);
-    // SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE);
-    // while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF) ||
-    //        !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOG) ||
-    //        !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOC) ||
-    //        !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOH) ||
-    //        !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOM) ||
-    //        !SysCtlPeripheralReady(SYSCTL_PERIPH_GPION) ||
-    //        !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA) ||
-    //        !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOD) ||
-    //        !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOE) ||
-    //        !SysCtlPeripheralReady(SYSCTL_PERIPH_ADC1))
-    //     ;
-    // /* Configure phase pins as outputs */
-    // GPIOPinTypeGPIOOutput(INLA);
-    // GPIOPinTypeGPIOOutput(INHB);
-    // GPIOPinTypeGPIOOutput(INLB);
-    // GPIOPinTypeGPIOOutput(INHC);
-    // GPIOPinTypeGPIOOutput(INLC);
-    // GPIOPinTypeGPIOOutput(ENA);
-    // /* Configure sense pins as inputs */
-    // GPIOPinTypeGPIOInput(ISENCE_A);
-    // GPIOPinTypeGPIOInput(ISENCE_B);
-    // GPIOPinTypeGPIOInput(ISENCE_C);
-    // /* Configure Hall sensor pins as inputs */
-    // GPIOPinTypeGPIOInput(HALLA);
-    // GPIOPinTypeGPIOInput(HALLB);
-    // GPIOPinTypeGPIOInput(HALLC);
-    // /* Disable brake */
-    // GPIOPinWrite(INLC, GPIO_PIN_5);
-    // /* Drive forwards */
-    // GPIOPinWrite(INHC, 0);
+    // MOTOR
+    /* Configure motor pins */
+    /* Configure ADC1 with ISENCE pins */
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC1);
+    /* Enable GPIO ports for motor phases */
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOG);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOC);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOH);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOM);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPION);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOD);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOG) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOC) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOH) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOM) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPION) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOD) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOE) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_ADC1))
+        ;
+    /* Configure phase pins as outputs */
+    GPIOPinTypeGPIOOutput(INLA);
+    GPIOPinTypeGPIOOutput(INHB);
+    GPIOPinTypeGPIOOutput(INLB);
+    GPIOPinTypeGPIOOutput(INHC);
+    GPIOPinTypeGPIOOutput(INLC);
+    GPIOPinTypeGPIOOutput(ENA);
+    /* Configure sense pins as inputs */
+    GPIOPinTypeGPIOInput(ISENCE_A);
+    GPIOPinTypeGPIOInput(ISENCE_B);
+    GPIOPinTypeGPIOInput(ISENCE_C);
+    /* Configure Hall sensor pins as inputs */
+    GPIOPinTypeGPIOInput(HALLA);
+    GPIOPinTypeGPIOInput(HALLB);
+    GPIOPinTypeGPIOInput(HALLC);
+    /* Disable brake */
+    GPIOPinWrite(INLC, GPIO_PIN_5);
+    /* Drive forwards */
+    GPIOPinWrite(INHC, 0);
 
     xButton2Semaphore = xSemaphoreCreateBinary();
     xIC2MasterSemaphore = xSemaphoreCreateBinary();
@@ -290,11 +290,11 @@ int main(void)
         taskENTER_CRITICAL();
         /* Motor Tasks*/
 
-        // prvConfigurePIDTimer();
+        prvConfigurePIDTimer();
         // /* Set-up adc interrupts for current measurements */
-        // prvConfigureADCInts();
+        prvConfigureADCInts();
         // /* Set-up interrupts for hall sensors */
-        // prvConfigureHallInts();
+        prvConfigureHallInts();
         /* Configure application specific hardware and initialize the task thread. */
         vCreateDisplayTask();
         SysCtlDelay(10000);
@@ -302,7 +302,7 @@ int main(void)
         vCreateLightSensorTask();
 
         /* Start the tasks and timer running. */
-        // vCreateMotorTask();
+        vCreateMotorTask();
         taskEXIT_CRITICAL();
         vTaskStartScheduler();
         UARTprintf("    Tasks Created\n");
