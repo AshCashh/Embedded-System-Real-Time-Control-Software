@@ -69,7 +69,7 @@
 #define MAX_DECELERATION_RPMS (ACCELERATION_TOLERANCE * 500.0f)
 #define ESTOP_DECELERATION_RPMS (ACCELERATION_TOLERANCE * 1000.0f)
 
-static inline float count_to_rpm(uint32_t count)
+static inline float count_to_rpm(int count)
 {
     return ((float)count / COUNT_PER_REVOLUTION) * PID_FREQUENCY * SECONDS_PER_MINUTE;
 }
@@ -154,16 +154,9 @@ static inline float clamp(float value, float min, float max)
 typedef struct
 {
     SemaphoreHandle_t mutex; /* mutex for controlling access */
-    float pwm; /* PWM percentage 0-100 */
-    volatile uint16_t duty_value; /* current duty cycle value */
-    uint16_t period_value; /* current period value */
     bool motor_enabled; /* stall prevention flag */
-    bool brake; /* brake flag */
     bool Estop; /* emergency stop flag */
-    float rpm; /* current rpm value */
     float target_rpm; /* target rpm value */
-    int32_t acceleration; /* current acceleration value */
     uint32_t current_limit; /* current limit in mA */
-    uint32_t acceleration_limit; /* acceleration limit in mA/s */
 } motorcontrol_t;
 
