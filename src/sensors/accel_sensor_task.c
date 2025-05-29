@@ -310,6 +310,7 @@ static void prvAccelTask(void *pvParameters)
                 if (xMessage.uFiltered >= accel_threshold)
                 {
                     xEventGroupSetBits(xEventGroup, EVENT_ESTOP_TRIGGERED);
+                    
                 }
                 xSemaphoreGive(xEmergencyMutex);
 
