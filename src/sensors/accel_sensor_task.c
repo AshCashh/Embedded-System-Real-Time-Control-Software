@@ -133,7 +133,7 @@ extern uint32_t g_ui32SysClock;
 
 tContext sContext;
 // Moving average filter variables
-#define FILTER_SIZE 5
+#define FILTER_SIZE 10
 static float filterBufferX[FILTER_SIZE] = {0};
 static float filterBufferY[FILTER_SIZE] = {0};
 static float filterBufferZ[FILTER_SIZE] = {0};
