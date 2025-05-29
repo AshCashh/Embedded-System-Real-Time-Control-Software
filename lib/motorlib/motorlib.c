@@ -117,18 +117,3 @@ void enableMotor()
     // UARTprintf("enabledMotor\n");
     GPIOPinWrite(ENA, GPIO_PIN_6);
 }
-
-void printMotorStatus(motorcontrol_t *motor_ctrl)
-{
-    if (motor_ctrl == NULL)
-    {
-        UARTprintf("Motor control struct is NULL\n");
-        return;
-    }
-    UARTprintf("Motor Status: RPM: %d, Acceleration: %d, Duty Cycle: %d%%, PWM: %d, Period: %d\r",
-               motor_ctrl->rpm,
-               motor_ctrl->acceleration,
-               motor_ctrl->pwm,
-               motor_ctrl->duty_value,
-               motor_ctrl->period_value);
-}

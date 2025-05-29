@@ -98,6 +98,10 @@ extern SemaphoreHandle_t xPowerMotorCalcsemaphore;
 extern QueueHandle_t xMotorRPMQueue;
 extern QueueHandle_t xPowerQueue;
 
+static float pwm;
+static float duty_value;
+const float period_value = 100; // Period value for PWM
+
 /*
  * Global variable to log the last GPIO button pressed.
  */
@@ -162,25 +166,6 @@ void vCreateMotorTask(void)
                 tskIDLE_PRIORITY + 1,
                 NULL);
 }
-/*-----------------------------------------------------------*/
-// static void prvConfigureButton(void)
-// {
-//     IntMasterDisable();
-//     /* Initialize the LaunchPad Buttons. */
-//     ButtonsInit();
-
-//     /* Configure both switches to trigger an interrupt on a falling edge. */
-//     GPIOIntTypeSet(BUTTONS_GPIO_BASE, ALL_BUTTONS, GPIO_FALLING_EDGE);
-
-//     /* Enable the interrupt for LaunchPad GPIO Port in the GPIO peripheral. */
-//     GPIOIntEnable(BUTTONS_GPIO_BASE, ALL_BUTTONS);
-
-//     /* Enable the Port F interrupt in the NVIC. */
-//     IntEnable(INT_GPIOJ);
-
-//     /* Enable global interrupts in the NVIC. */
-//     IntMasterEnable();
-// }
 
 float estimate_instantaneous_power(float i_a, float i_b)
 {
@@ -387,6 +372,8 @@ static void prvMotorPIDTask(void *parameters)
     float error_prev = 0.0f;
     float integral = 0.0f;
     float derivative = 0.0f;
+
+    bool local_motor_enabled = false, local_Estop = false;
     for (;;)
     {
         if (xSemaphoreTake(xPIDTimerSemaphore, pdMS_TO_TICKS(2000)) != pdTRUE)
@@ -407,25 +394,34 @@ static void prvMotorPIDTask(void *parameters)
                 motor_ctrl.motor_enabled = false; // Disable motor
                 xSemaphoreGive(motor_ctrl.mutex);
             }
-
         }
 
-        taskENTER_CRITICAL();
+        
 
-        /* clear stale data */
-        // if ((last_hall_update - xTaskGetTickCount()) > pdMS_TO_TICKS(800))
-        // {
-        //     raw_rpm = 0;
-        // }
+        taskENTER_CRITICAL();
         raw_rpm = count_to_rpm(count);
         count = 0;
-        local_target_rpm = motor_ctrl.target_rpm;
-        local_period = motor_ctrl.period_value;
-        /* don't accumulate error if in stop state */
-        if (!motor_ctrl.motor_enabled)
+        taskEXIT_CRITICAL();
+        if(xSemaphoreTake(motor_ctrl.mutex, pdMS_TO_TICKS(100) ) == pdTRUE)
+        {
+            local_target_rpm = motor_ctrl.target_rpm;
+            local_Estop = motor_ctrl.Estop;
+            local_motor_enabled = motor_ctrl.motor_enabled;
+            xSemaphoreGive(motor_ctrl.mutex);
+        } 
+        else
         {
             local_target_rpm = 0.0f;
-            if ((int)raw_rpm < 10) disableMotor();
+            local_Estop = false;
+            local_motor_enabled = false;
+        }
+        local_period = period_value;
+        /* don't accumulate error if in stop state */
+        if (!local_motor_enabled)
+        {
+            local_target_rpm = 0.0f;
+            if ((int)raw_rpm < 10)
+                disableMotor();
         }
         else
         {
@@ -433,11 +429,10 @@ static void prvMotorPIDTask(void *parameters)
         }
         /* if estop set deceleration rate to be estop */
         max_decel_delta = (MAX_DECELERATION_RPMS * dt);
-        if (motor_ctrl.Estop)
+        if (local_Estop)
         {
             max_decel_delta = (ESTOP_DECELERATION_RPMS * dt);
         }
-        taskEXIT_CRITICAL();
         rpm_sum -= rpm_buffer[rpm_index];
         rpm_buffer[rpm_index] = raw_rpm;
         rpm_sum += raw_rpm;
@@ -451,21 +446,18 @@ static void prvMotorPIDTask(void *parameters)
         accel_sum += acceleration;
         accel_index = (accel_index + 1) % MOVING_AVERAGE_SAMPLES;
         float avg_acceleration = accel_sum / (float)MOVING_AVERAGE_SAMPLES;
-        /* Clamp ramped target to enforce max acceleration relative to actual RPM */
-        float delta_rpm = local_target_rpm - rpm;
-
-        if (delta_rpm > max_accel_delta)
+        if ((local_target_rpm - ramped_target_rpm) > max_accel_delta)
         {
-            ramped_target_rpm = rpm + max_accel_delta;
+            ramped_target_rpm += max_accel_delta;
         }
-        else if (delta_rpm < -max_decel_delta)
+        else if ((local_target_rpm - ramped_target_rpm) < -max_decel_delta)
         {
-            ramped_target_rpm = rpm - max_decel_delta;
+            ramped_target_rpm -= max_decel_delta;
         }
         else
         {
             ramped_target_rpm = local_target_rpm;
-        }
+        } 
 
         /* send rpm in queue */
         xMessage.ulTimeStamp = xTaskGetTickCount();
@@ -479,15 +471,10 @@ static void prvMotorPIDTask(void *parameters)
         u = clamp(u, 2, 100); // Assuming u is a percentage value (0-100%)
         uint32_t local_duty = PWM_TO_DUTY(local_period, u);
 
-        // bool need_disable = false;
-        if (xSemaphoreTake(motor_ctrl.mutex, pdMS_TO_TICKS(20)) == pdTRUE)
-        {
-            motor_ctrl.rpm = rpm;
-            motor_ctrl.pwm = u;
-            motor_ctrl.duty_value = local_duty;
-            xSemaphoreGive(motor_ctrl.mutex);
-        }
-
+        // bool need_disable = false
+        pwm = u;
+        duty_value = local_duty;
+        // UARTprintf("RPM: %d, Target: %d, Duty: %d\n", (int)rpm, local_target_rpm, duty_value);
         setDuty(local_duty);
         xMessage.uFiltered = (uint32_t)(rpm);
         xMessage.uRaw = (uint32_t)(raw_rpm);
@@ -552,33 +539,23 @@ void prvMotorStart()
 
     // configure buttons
     // prvConfigureButton();
+    pwm = 50.0f; // Set initial PWM value to 50%
+
+    // motor_ctrl.target_rpm = 2000;
+    /* Initialise the motors and set the duty cycle (speed) in microseconds */
+    initMotorLib(period_value);
+    duty_value = PWM_TO_DUTY(period_value, pwm);
+    setDuty(duty_value);
+
+    
+
     if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
     {
-        motor_ctrl.pwm = 50;
-        // motor_ctrl.target_rpm = 2000;
-        /* Initialise the motors and set the duty cycle (speed) in microseconds */
-        initMotorLib(motor_ctrl.period_value);
-        motor_ctrl.duty_value = PWM_TO_DUTY(motor_ctrl.period_value, motor_ctrl.pwm);
-        setDuty(motor_ctrl.duty_value);
         motor_ctrl.motor_enabled = false;
-        motor_ctrl.acceleration = 0;
-        disableMotor();
-        xSemaphoreGive(motor_ctrl.mutex);
-    }
-    else
-    {
-        // Handle error
-    }
-    /* start motor phase cycle */
-    // enableMotor();
-    /* Kick start the motor */
-    // Do an initial read of the hall effect sensor GPIO lines
-    /* read hall sensor gpio lines */
-    if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
-    {
         updateMotor();
         xSemaphoreGive(motor_ctrl.mutex);
     }
+    disableMotor();
 }
 
 void ADC1IntHandler(void)

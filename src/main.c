@@ -226,10 +226,9 @@ int main(void)
     xPowerMotorCalcsemaphore = xSemaphoreCreateBinary();
     xCountMutex = xSemaphoreCreateMutex();
     motor_ctrl.mutex = xSemaphoreCreateMutex();
-    motor_ctrl.pwm = 25;
-    motor_ctrl.period_value = 50;
-    motor_ctrl.duty_value = PWM_TO_DUTY(motor_ctrl.period_value, motor_ctrl.pwm);
-    motor_ctrl.brake = false;
+    motor_ctrl.Estop = false; // Initialize E-Stop flag
+    motor_ctrl.motor_enabled = false; // Initialize motor enabled state
+    motor_ctrl.target_rpm = 0.0f; // Initialize target RPM
 
     // MOTOR
     /* Configure motor pins */
