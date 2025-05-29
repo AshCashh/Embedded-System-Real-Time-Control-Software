@@ -130,7 +130,7 @@ static inline float clamp(float value, float min, float max)
 
 #define ADC_CURRENT_FREQ 160
 
-#define ADC_CURRENT_SAMPLES 30 /* Number of samples to average for current measurement */
+#define ADC_CURRENT_SAMPLES 40 /* Number of samples to average for current measurement */
 
 #define ADC_CURRENT_SAMPLES_AVERAGE_FIX 400 /* Number of samples to average for current measurement */
 
