@@ -147,6 +147,7 @@ static void prvLightSensorTask(void *pvParameters);
 // static void prvDISPTask(void *pvParameters);
 static void SignalSampling(TimerHandle_t timer);
 void xOptIntHandler(void);
+void turnOnLED(bool on);
 
 /* Handles the timer interrupt and signals when the read/write task is completed */
 void xTimerHandler(void);
@@ -239,16 +240,18 @@ static void prvLightSensorTask(void *pvParameters)
                 if (convertedLux > HIGH_THRESHOLD)
                 {
                     xEventGroupSetBits(xEventGroup, EVENT_HIGH_THRESHOLD);
+                    turnOnLED(false);
                 }
-                else if (convertedLux < LOW_THRESHOLD)
+                else if (convertedLux <= LOW_THRESHOLD)
                 {
                     xEventGroupSetBits(xEventGroup, EVENT_LOW_THRESHOLD);
+                    turnOnLED(true);
                 }
                 // add to queue (both raw and filtered values)
                 xMessage.ulTimeStamp = xTaskGetTickCount();
                 xMessage.uFiltered = filteredLux;
                 xMessage.uRaw = convertedLux;
-                //UARTprintf("Lux: %d\n", xMessage.uRaw);
+                // UARTprintf("Lux: %d\n", xMessage.uRaw);
                 if (xQueueSend(xLightQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
                 {
                     // UARTprintf("Data sent to queue: %d\n", (int)convertedLux);
@@ -281,17 +284,76 @@ void xOptIntHandler(void)
     portYIELD_FROM_ISR(xOPTTaskWoken);
 }
 
-// void xI2CHandler(void)
-// {
-//     BaseType_t xSignalTaskWoken = pdFALSE;
+//*****************************************************************************
+//
+// blinky.c - Simple example to blink the on-board LED.
+//
+// Copyright (c) 2013-2020 Texas Instruments Incorporated.  All rights reserved.
+// Software License Agreement
+//
+// Texas Instruments (TI) is supplying this software for use solely and
+// exclusively on TI's microcontroller products. The software is owned by
+// TI and/or its suppliers, and is protected under applicable copyright
+// laws. You may not combine this software with "viral" open-source
+// software in order to form a larger program.
+//
+// THIS SOFTWARE IS PROVIDED "AS IS" AND WITH ALL FAULTS.
+// NO WARRANTIES, WHETHER EXPRESS, IMPLIED OR STATUTORY, INCLUDING, BUT
+// NOT LIMITED TO, IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+// A PARTICULAR PURPOSE APPLY TO THIS SOFTWARE. TI SHALL NOT, UNDER ANY
+// CIRCUMSTANCES, BE LIABLE FOR SPECIAL, INCIDENTAL, OR CONSEQUENTIAL
+// DAMAGES, FOR ANY REASON WHATSOEVER.
+//
+// This is part of revision 2.2.0.295 of the EK-TM4C1294XL Firmware Package.
+//
+//*****************************************************************************
 
-//     // Clear interrupt
-//     I2CMasterIntClear(I2C0_BASE);
+#include <stdint.h>
+#include <stdbool.h>
+#include "inc/hw_memmap.h"
+#include "driverlib/debug.h"
+#include "driverlib/gpio.h"
+#include "driverlib/sysctl.h"
 
-//     // Only give the semaphore when the I2C bus is idle (transfer finished)
-//     if (!I2CMasterBusy(I2C0_BASE))
-//     {
-//         xSemaphoreGiveFromISR(xIC2MasterSemaphore, &xSignalTaskWoken);
-//         portYIELD_FROM_ISR(xSignalTaskWoken);
-//     }
-// }
+//*****************************************************************************
+//
+//! \addtogroup example_list
+//! <h1>Blinky (blinky)</h1>
+//!
+//! A very simple example that blinks the on-board LED using direct register
+//! access.
+//
+//*****************************************************************************
+
+//*****************************************************************************
+//
+// The error routine that is called if the driver library encounters an error.
+//
+//*****************************************************************************
+#ifdef DEBUG
+void __error__(char *pcFilename, uint32_t ui32Line)
+{
+    while (1)
+        ;
+}
+#endif
+
+//*****************************************************************************
+//
+// Blink the on-board LED.
+//
+//*****************************************************************************
+void turnOnLED(bool on)
+{
+    if (on)
+        //
+        // Turn on the LED.
+        //
+        GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_0, GPIO_PIN_0);
+    else
+
+        //
+        // Turn off the LED.
+        //
+        GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_0, 0x0);
+}
