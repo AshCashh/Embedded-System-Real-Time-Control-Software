@@ -350,16 +350,16 @@ tSliderWidget g_psSliders[] =
 tSliderWidget g_psLimitSliders[] = {
     // Current Threshold
     SliderStruct(g_psPanels + 1, 0, 0, &g_sKentec320x240x16_SSD2119,
-                 20, 45, 280, 30, 0, 2000, 1000, // x, y, width, height
+                 20, 45, 280, 30, 0, 2000, 400, // x, y, width, height
                  (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
                  ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
-                 &g_sFontCm20, "Current Threshold:", 0, 0, OnLimitSliderChange),
+                 &g_sFontCm20, "Current Threshold: 400mA", 0, 0, OnLimitSliderChange),
     // Acceleration Threshold
     SliderStruct(g_psPanels + 1, 0, 0, &g_sKentec320x240x16_SSD2119,
-                 20, 100, 280, 30, 0, 25, 10, // x, y, width, height,
+                 20, 100, 280, 30, 0, 25, 25, // x, y, width, height,
                  (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE | SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
                  ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
-                 &g_sFontCm20, "Acceleration Threshold:", 0, 0, OnLimitSliderChange),
+                 &g_sFontCm20, "Acceleration Threshold: 25ms^-2", 0, 0, OnLimitSliderChange),
 };
 
 tCanvasWidget g_sLimitSlidersCanvas = CanvasStruct(
@@ -381,26 +381,27 @@ tCanvasWidget g_sLimitSlidersCanvas = CanvasStruct(
 
 void OnLimitSliderChange(tWidget *psWidget, int32_t i32Value)
 {
-    static char pcText[99];
+    static char pcText5[99];
+    static char pcText6[99];
 
     if (psWidget == (tWidget *)&g_psLimitSliders[0])
     {
         current_threshold = i32Value;
-        usprintf(pcText, "Current: %d mA", i32Value);
-        SliderTextSet(&g_psLimitSliders[0], pcText);
+        usprintf(pcText5, "Current: %d mA", i32Value);
+        SliderTextSet(&g_psLimitSliders[0], pcText5);
         if (xSemaphoreTake(motor_ctrl.mutex, pdMS_TO_TICKS(100)) == pdTRUE)
         {
             motor_ctrl.current_limit = i32Value;
             xSemaphoreGive(motor_ctrl.mutex);
         }
     }
-    else if (psWidget == (tWidget *)&g_psLimitSliders[1])
+    if (psWidget == (tWidget *)&g_psLimitSliders[1])
     {
         xSemaphoreTake(xEmergencyMutex, pdMS_TO_TICKS(100));
         accel_threshold = i32Value;
         xSemaphoreGive(xEmergencyMutex);
-        usprintf(pcText, "Acceleration: %d ms^-2", i32Value);
-        SliderTextSet(&g_psLimitSliders[1], pcText);
+        usprintf(pcText6, "Acceleration: %d ms^-2", i32Value);
+        SliderTextSet(&g_psLimitSliders[1], pcText6);
         if (xSemaphoreTake(motor_ctrl.mutex, pdMS_TO_TICKS(100)) == pdTRUE)
         {
             motor_ctrl.acceleration_limit = i32Value;
@@ -1262,16 +1263,8 @@ static void prvDisplayTask(void *pvParameters)
     uint32_t data_index = 0;
     bool plotRawData = false; // Flag to toggle between raw and filtered data
     accel_threshold = 10;
-    current_threshold = 1000; // Set default current threshold
+    current_threshold = 400; // Set default current threshold
 
-    static char pcText5[64];
-    // Current Threshold
-    usprintf(pcText5, "Current: %d mA", current_threshold);
-    SliderTextSet(&g_psLimitSliders[0], pcText5);
-    static char pcText6[64];
-    // Acceleration Threshold
-    usprintf(pcText6, "Acceleration: %d ms^-2", accel_threshold);
-    SliderTextSet(&g_psLimitSliders[1], pcText6);
     // Add the title block and the previous and next buttons to the widget
     // tree.
     //
