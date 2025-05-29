@@ -343,7 +343,7 @@ static void prvCurrentReadTask(void *pvParameters)
 
             if (((power_filtered / MOTOR_NORMAL_VOLTAGE)*1000) > current_thresh)
             {
-                UARTprintf("Current threshold exceeded: %d, %d\n", (int)((power_filtered/MOTOR_NORMAL_VOLTAGE)*1000), current_thresh);
+                // UARTprintf("Current threshold exceeded: %d, %d\n", (int)((power_filtered/MOTOR_NORMAL_VOLTAGE)*1000), current_thresh);
                 xEventGroupSetBits(xEventGroup, EVENT_ESTOP_TRIGGERED);
                 // UARTprintf("Emergency stop acknowledged\n");
             }

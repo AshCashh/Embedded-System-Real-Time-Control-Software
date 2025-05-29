@@ -1262,6 +1262,7 @@ static void prvDisplayTask(void *pvParameters)
     uint32_t data_index = 0;
     bool plotRawData = false; // Flag to toggle between raw and filtered data
     accel_threshold = 10;
+    current_threshold = 1000; // Set default current threshold
 
     static char pcText5[64];
     // Current Threshold
@@ -1322,7 +1323,7 @@ static void prvDisplayTask(void *pvParameters)
             }
         }
 
-        if (need_repaint)
+        if (need_repaint && g_ui32Panel == 0)
         {
             WidgetPaint((tWidget *)&g_sDashboard);
             last_day = day;
