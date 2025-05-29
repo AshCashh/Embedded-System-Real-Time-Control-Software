@@ -85,6 +85,9 @@
 /*-----------------------------------------------------------*/
 #include <stdbool.h>
 
+
+void turnOnStatusLED(bool on);
+void CrashLED(bool on);
 extern QueueHandle_t xMotorRPMQueue;
 extern QueueHandle_t xPowerQueue;
 extern motorcontrol_t motor_ctrl;
@@ -903,6 +906,8 @@ void OnIntroPaint(tWidget *psWidget, tContext *psContext)
         PushButtonFillColorSet(&g_sStopButton, ClrRed); // Stop button active
         GrContextForegroundSet(psContext, ClrBlue);
         pcState = "RUNNING";
+        turnOnStatusLED(true);
+        CrashLED(false);
         break;
     case STOP:
         GrContextForegroundSet(psContext, ClrRed);
@@ -910,6 +915,8 @@ void OnIntroPaint(tWidget *psWidget, tContext *psContext)
         PushButtonFillColorSet(&g_sStopButton, ClrGray);   // Stop button greyed
         PushButtonFillColorSet(&g_sStartButton, ClrGreen); // Start button active
         pcState = "STOPPED";
+        turnOnStatusLED(false);
+        CrashLED(false);
         break;
     case ESTOP:
         // Start button can remain green or greyed out as you wish
@@ -919,6 +926,7 @@ void OnIntroPaint(tWidget *psWidget, tContext *psContext)
         PushButtonFillColorSet(&g_sStopButton, ClrGray);
         GrContextForegroundSet(psContext, ClrOrange);
         pcState = "E-STOP";
+        CrashLED(true);
         break;
     default: // assume ESTOP or fault
         GrContextForegroundSet(psContext, ClrWhite);
@@ -966,9 +974,9 @@ void OnIntroPaint(tWidget *psWidget, tContext *psContext)
     // Draw day/night indicator in top-right corner
 
     tRectangle dayNightRect;
-    dayNightRect.i16XMin = 8;      // X position for text background
-    dayNightRect.i16YMin = 150;    // Y position for text background
-    dayNightRect.i16XMax = 8 + 60; // Width enough for "Night"
+    dayNightRect.i16XMin = 8;        // X position for text background
+    dayNightRect.i16YMin = 150;      // Y position for text background
+    dayNightRect.i16XMax = 8 + 60;   // Width enough for "Night"
     dayNightRect.i16YMax = 150 + 24; // Height for text
 
     // Always clear the background before drawing text
@@ -1123,7 +1131,6 @@ void OnButtonPress(tWidget *psWidget)
     {
         if (Motor.MotorState != ESTOP)
         {
-            
         }
         else
         {
@@ -1277,7 +1284,7 @@ static void prvDisplayTask(void *pvParameters)
     //  Issue the initial paint request to the widgets.
     //
     WidgetPaint(WIDGET_ROOT);
-    
+
     //
     // Loop forever handling widget messages.
     //
@@ -1328,7 +1335,7 @@ static void prvDisplayTask(void *pvParameters)
             Motor.MotorState = ESTOP;
             if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
             {
-                motor_ctrl.Estop = true; // Set E-Stop flag
+                motor_ctrl.Estop = true;          // Set E-Stop flag
                 motor_ctrl.motor_enabled = false; // Disable motor
                 xSemaphoreGive(motor_ctrl.mutex);
             }
@@ -1376,7 +1383,7 @@ static void prvDisplayTask(void *pvParameters)
                 // print the buffer recieved data
                 // uint32_t prevIndex = (g_ui32LightDataIndex == 0) ? (LIGHT_DATA_BUFFER_SIZE - 1) : (g_ui32LightDataIndex - 1);
                 // UARTprintf("Light Data: %d, Count: %d\n", g_ui32LightDataBuffer[prevIndex], g_ui32LightDataCount);
-                // UARTprintf("%d, %d\n", xRxedStructure.uRaw, xRxedStructure.uFiltered);
+                UARTprintf("%d, %d\n", xRxedStructure.uRaw, xRxedStructure.uFiltered);
                 vSensorData(g_ui32LightDataBuffer, g_ui32LightDataCount, PLOT_LIGHT, plotRawData);
             }
             else
@@ -1391,7 +1398,7 @@ static void prvDisplayTask(void *pvParameters)
                 g_ui32AccelDataBuffer[g_ui32AccelDataIndex] = plotRawData ? xRxedStructure.uRaw : xRxedStructure.uFiltered;
                 g_ui32AccelDataIndex = (g_ui32AccelDataIndex + 1) % ACCEL_DATA_BUFFER_SIZE;
                 // uint32_t prevIndex = (g_ui32AccelDataIndex == 0) ? (ACCEL_DATA_BUFFER_SIZE - 1) : (g_ui32AccelDataIndex - 1);
-                // UARTprintf("%d, %d\n", xRxedStructure.uRaw, xRxedStructure.uFiltered);
+                UARTprintf("%d, %d\n", xRxedStructure.uRaw, xRxedStructure.uFiltered);
 
                 if (g_ui32AccelDataCount < ACCEL_DATA_BUFFER_SIZE)
                     g_ui32AccelDataCount++;
@@ -1404,7 +1411,7 @@ static void prvDisplayTask(void *pvParameters)
             {
                 g_ui32RPMDataBuffer[g_ui32RPMDataIndex] = plotRawData ? xRxedStructure.uRaw : xRxedStructure.uFiltered;
                 g_ui32RPMDataIndex = (g_ui32RPMDataIndex + 1) % RPM_DATA_BUFFER_SIZE;
-                // UARTprintf("%d, %d\n", xRxedStructure.uRaw, xRxedStructure.uFiltered);
+                UARTprintf("%d, %d\n", xRxedStructure.uRaw, xRxedStructure.uFiltered);
                 if (g_ui32RPMDataCount < RPM_DATA_BUFFER_SIZE)
                     g_ui32RPMDataCount++;
                 vSensorData(g_ui32RPMDataBuffer, g_ui32RPMDataCount, PLOT_RPM, plotRawData);
@@ -1420,6 +1427,7 @@ static void prvDisplayTask(void *pvParameters)
             {
                 g_ui32PowerDataBuffer[g_ui32PowerDataIndex] = plotRawData ? xRxedStructure.uRaw : xRxedStructure.uFiltered;
                 g_ui32PowerDataIndex = (g_ui32PowerDataIndex + 1) % POWER_DATA_BUFFER_SIZE;
+                UARTprintf("%d, %d\n", xRxedStructure.uRaw, xRxedStructure.uFiltered);
                 if (g_ui32PowerDataCount < POWER_DATA_BUFFER_SIZE)
                     g_ui32PowerDataCount++;
                 vSensorData(g_ui32PowerDataBuffer, g_ui32PowerDataCount, PLOT_POWER, plotRawData);
@@ -1555,7 +1563,7 @@ static void vSensorData(uint32_t *data, int dataSize, PlotType plotType, bool fi
     // Draw Y axis min/max labels
     GrContextFontSet(&sContext, g_psFontFixed6x8);
     char yMinStr[8], yMaxStr[8];
-    usprintf(yMinStr, "%u", yMin);  
+    usprintf(yMinStr, "%u", yMin);
     usprintf(yMaxStr, "%u", yMax);
     GrContextForegroundSet(&sContext, ClrRed);
     GrStringDraw(&sContext, yMinStr, -1, xStart - 8, yStart - 8, false);
@@ -1576,4 +1584,34 @@ void xTimerHandler(void)
     count++;
     xSemaphoreGiveFromISR(xSemaphoreTimer0, &xHigherPriorityTaskWoken);
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+}
+
+void turnOnStatusLED(bool on)
+{
+    if (on)
+        //
+        // Turn on the LED.
+        //
+        GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_1, GPIO_PIN_1);
+    else
+
+        //
+        // Turn off the LED.
+        //
+        GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_1, 0x0);
+}
+
+void CrashLED(bool on)
+{
+    if (on)
+        //
+        // Turn on the LED.
+        //
+        GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_4, GPIO_PIN_4);
+    else
+
+        //
+        // Turn off the LED.
+        //
+        GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_4, 0x0);
 }
