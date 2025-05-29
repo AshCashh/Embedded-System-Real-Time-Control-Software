@@ -140,6 +140,7 @@ static void prvConfigureI2C(void); // configures I2C for sensor communication
 static void prvBMI160DataReady(void);
 static void prvDisplayInit(void);
 void clearI2CBus(void);
+static void prvConfigLED(void);
 
 /*
  * Queue used to send and receive pointers to struct AMessage structures.
@@ -230,6 +231,50 @@ int main(void)
     motor_ctrl.duty_value = PWM_TO_DUTY(motor_ctrl.period_value, motor_ctrl.pwm);
     motor_ctrl.brake = false;
 
+    // MOTOR
+    /* Configure motor pins */
+    /* Configure ADC1 with ISENCE pins */
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC1);
+    /* Enable GPIO ports for motor phases */
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOG);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOC);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOH);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOM);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPION);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOD);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOG) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOC) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOH) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOM) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPION) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOD) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOE) ||
+           !SysCtlPeripheralReady(SYSCTL_PERIPH_ADC1))
+        ;
+    /* Configure phase pins as outputs */
+    GPIOPinTypeGPIOOutput(INLA);
+    GPIOPinTypeGPIOOutput(INHB);
+    GPIOPinTypeGPIOOutput(INLB);
+    GPIOPinTypeGPIOOutput(INHC);
+    GPIOPinTypeGPIOOutput(INLC);
+    GPIOPinTypeGPIOOutput(ENA);
+    /* Configure sense pins as inputs */
+    GPIOPinTypeGPIOInput(ISENCE_A);
+    GPIOPinTypeGPIOInput(ISENCE_B);
+    GPIOPinTypeGPIOInput(ISENCE_C);
+    /* Configure Hall sensor pins as inputs */
+    GPIOPinTypeGPIOInput(HALLA);
+    GPIOPinTypeGPIOInput(HALLB);
+    GPIOPinTypeGPIOInput(HALLC);
+    /* Disable brake */
+    GPIOPinWrite(INLC, GPIO_PIN_5);
+    /* Drive forwards */
+    GPIOPinWrite(INHC, 0);
     // MOTOR
     /* Configure motor pins */
     /* Configure ADC1 with ISENCE pins */
@@ -524,6 +569,7 @@ static void prvSetupHardware(void)
     prvDisplayInit();
     prvConfigureUART();
     prvConfigureI2C();
+    prvConfigLED();
     // prvBMI160DataReady();
     // prvConfigSMBusINT();
     // prvConfigureHWTimer();
@@ -651,6 +697,26 @@ static void prvConfigurePIDTimer(void)
     TimerEnable(TIMER2_BASE, TIMER_A);
 }
 /*-----------------------------------------------------------*/
+
+static void prvConfigLED(void) {
+        //
+    // Enable the GPIO port that is used for the on-board LED.
+    //
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPION);
+    //
+    // Check if the peripheral access is enabled.
+    //
+    while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPION))
+    {
+    }
+    //
+    // Enable the GPIO pin for the LED (PN0).  Set the direction as output, and
+    // enable the GPIO pin for digital function.
+    //
+    GPIOPinTypeGPIOOutput(GPIO_PORTN_BASE, GPIO_PIN_0);
+    return;
+}
+
 
 void vApplicationMallocFailedHook(void)
 {

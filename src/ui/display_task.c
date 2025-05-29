@@ -93,6 +93,7 @@ extern motorcontrol_t motor_ctrl;
 #define RPM_MAX 3000
 uint32_t accel_threshold;
 uint32_t current_threshold;
+static bool last_day = false;
 //*****************************************************************************
 //
 // The error routine that is called if the driver library encounters an error.
@@ -967,17 +968,20 @@ void OnIntroPaint(tWidget *psWidget, tContext *psContext)
     GrStringDraw(psContext, "RPM:", -1, 20, 70 - 15, false);
 
     // Draw day/night indicator in top-right corner
+
     tRectangle dayNightRect;
-    dayNightRect.i16XMin = 320 - 60; // 60px wide, right-aligned
-    dayNightRect.i16YMin = 8;
-    dayNightRect.i16XMax = 319 - 8; // 8px padding from right
-    dayNightRect.i16YMax = 8 + 24;  // 24px tall
+    dayNightRect.i16XMin = 8;      // X position for text background
+    dayNightRect.i16YMin = 150;    // Y position for text background
+    dayNightRect.i16XMax = 8 + 60; // Width enough for "Night"
+    dayNightRect.i16YMax = 150 + 24; // Height for text
+
+    // Always clear the background before drawing text
+    GrContextForegroundSet(psContext, ClrBlack);
+    GrRectFill(psContext, &dayNightRect);
+
     if (!day)
     {
         // Night: blue box, white text "Night"
-        GrContextForegroundSet(psContext, ClrBlack);
-        GrRectFill(psContext, &dayNightRect);
-        // Draw "Night" at bottom left corner, y decreased by 50
         GrContextForegroundSet(psContext, ClrBlueViolet);
         GrContextFontSet(psContext, &g_sFontCm18);
         GrStringDraw(psContext, "Night", -1, 8, 150, false);
@@ -985,9 +989,6 @@ void OnIntroPaint(tWidget *psWidget, tContext *psContext)
     else
     {
         // Day: yellow box, grey text "Day"
-        GrContextForegroundSet(psContext, ClrBlack);
-        GrRectFill(psContext, &dayNightRect);
-        // Draw "Day" at bottom left corner, y decreased by 50
         GrContextForegroundSet(psContext, ClrGoldenrod);
         GrContextFontSet(psContext, &g_sFontCm18);
         GrStringDraw(psContext, "Day", -1, 8, 150, false);
@@ -1126,14 +1127,7 @@ void OnButtonPress(tWidget *psWidget)
     {
         if (Motor.MotorState != ESTOP)
         {
-            // Trigger E-STOP
-            Motor.MotorState = ESTOP;
-            // Change button to ACK (orange, enabled)
-            PushButtonTextSet(&g_sEStopButton, "ACK");
-            PushButtonFillColorSet(&g_sEStopButton, ClrOrange);
-            PushButtonFillOn(&g_sEStopButton);
-            PushButtonTextOn(&g_sEStopButton);
-            WidgetPaint((tWidget *)&g_sEStopButton);
+            
         }
         else
         {
@@ -1268,6 +1262,15 @@ static void prvDisplayTask(void *pvParameters)
     uint32_t data_index = 0;
     bool plotRawData = false; // Flag to toggle between raw and filtered data
     accel_threshold = 10;
+
+    static char pcText5[64];
+    // Current Threshold
+    usprintf(pcText5, "Current: %d mA", current_threshold);
+    SliderTextSet(&g_psLimitSliders[0], pcText5);
+    static char pcText6[64];
+    // Acceleration Threshold
+    usprintf(pcText6, "Acceleration: %d ms^-2", accel_threshold);
+    SliderTextSet(&g_psLimitSliders[1], pcText6);
     // Add the title block and the previous and next buttons to the widget
     // tree.
     //
@@ -1285,7 +1288,7 @@ static void prvDisplayTask(void *pvParameters)
     //  Issue the initial paint request to the widgets.
     //
     WidgetPaint(WIDGET_ROOT);
-
+    
     //
     // Loop forever handling widget messages.
     //
@@ -1299,16 +1302,30 @@ static void prvDisplayTask(void *pvParameters)
             pdFALSE, // Wait for any bit
             0);      // Non-blocking
 
+        bool need_repaint = false;
+
         if (uxBits & EVENT_HIGH_THRESHOLD)
         {
             day = true;
-            // WidgetPaint((tWidget *)&g_sDashboard);
+            if (last_day != day)
+            {
+                need_repaint = true;
+            }
         }
 
         if (uxBits & EVENT_LOW_THRESHOLD)
         {
             day = false;
-            // WidgetPaint((tWidget *)&g_sDashboard);
+            if (last_day != day)
+            {
+                need_repaint = true;
+            }
+        }
+
+        if (need_repaint)
+        {
+            WidgetPaint((tWidget *)&g_sDashboard);
+            last_day = day;
         }
 
         if (uxBits & EVENT_BTN_TOGGLE)
@@ -1549,7 +1566,7 @@ static void vSensorData(uint32_t *data, int dataSize, PlotType plotType, bool fi
     // Draw Y axis min/max labels
     GrContextFontSet(&sContext, g_psFontFixed6x8);
     char yMinStr[8], yMaxStr[8];
-    usprintf(yMinStr, "%u", yMin);
+    usprintf(yMinStr, "%u", yMin);  
     usprintf(yMaxStr, "%u", yMax);
     GrContextForegroundSet(&sContext, ClrRed);
     GrStringDraw(&sContext, yMinStr, -1, xStart - 8, yStart - 8, false);
