@@ -446,21 +446,18 @@ static void prvMotorPIDTask(void *parameters)
         accel_sum += acceleration;
         accel_index = (accel_index + 1) % MOVING_AVERAGE_SAMPLES;
         float avg_acceleration = accel_sum / (float)MOVING_AVERAGE_SAMPLES;
-        /* Clamp ramped target to enforce max acceleration relative to actual RPM */
-        float delta_rpm = local_target_rpm - rpm;
-
-        if (delta_rpm > max_accel_delta)
+        if ((local_target_rpm - ramped_target_rpm) > max_accel_delta)
         {
-            ramped_target_rpm = rpm + max_accel_delta;
+            ramped_target_rpm += max_accel_delta;
         }
-        else if (delta_rpm < -max_decel_delta)
+        else if ((local_target_rpm - ramped_target_rpm) < -max_decel_delta)
         {
-            ramped_target_rpm = rpm - max_decel_delta;
+            ramped_target_rpm -= max_decel_delta;
         }
         else
         {
             ramped_target_rpm = local_target_rpm;
-        }
+        } 
 
         /* send rpm in queue */
         xMessage.ulTimeStamp = xTaskGetTickCount();
