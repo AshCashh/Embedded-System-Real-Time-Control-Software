@@ -1259,6 +1259,7 @@ static void prvDisplayTask(void *pvParameters)
 {
     UARTprintf("Display task started\n");
     tRectangle sRect;
+    bool filter = false;
     Motor.MotorState = STOP;
     struct AMessage xRxedStructure;
     uint32_t buffer_data[100] = {0};
@@ -1266,6 +1267,7 @@ static void prvDisplayTask(void *pvParameters)
     bool plotRawData = false; // Flag to toggle between raw and filtered data
     accel_threshold = 10;
     current_threshold = 400; // Set default current threshold
+
 
     // Add the title block and the previous and next buttons to the widget
     // tree.
@@ -1328,6 +1330,27 @@ static void prvDisplayTask(void *pvParameters)
         {
             plotRawData = !plotRawData;
             UARTprintf("Toggled plot mode: %s\n", plotRawData ? "Raw Data" : "Filtered Data");
+            char filteredText[10];
+    // Clear the plot area
+            tRectangle sRect = {10+172, 175+12, 10 + 226, 175+1}; // parameters: {xMin, yMin, xMax, yMax}
+            GrContextForegroundSet(&sContext, ClrBlack);
+            GrRectFill(&sContext, &sRect);
+            if (!filter)
+            {
+                usprintf(filteredText, "Filtered");
+                GrContextForegroundSet(&sContext, ClrRed);
+            }
+            else
+            {
+                usprintf(filteredText, "Raw Data");
+                GrContextForegroundSet(&sContext, ClrBlue);
+            }
+            filter = !filter; // Toggle filter state
+            
+
+            //Draw the filtered text
+            GrContextFontSet(&sContext, g_psFontFixed6x8);
+            GrStringDraw(&sContext, filteredText, -1, 10 + 180, 175 + 6, false);
         }
 
         if (g_ui32Panel == 0 && uxBits & EVENT_ESTOP_TRIGGERED)
@@ -1447,6 +1470,9 @@ static void vSensorData(uint32_t *data, int dataSize, PlotType plotType, bool fi
     uint32_t yTop = 40;    // top edge of plot
     uint32_t xStep = 3;    // Distance between points on the X-axis
     uint32_t plotWidth = 300;
+    uint32_t xMax = 20;
+    
+
 
     // Axis scaling and labels
     uint32_t yMin = 0, yMax = 100, yScale = 1;
@@ -1465,6 +1491,7 @@ static void vSensorData(uint32_t *data, int dataSize, PlotType plotType, bool fi
     case PLOT_ACCEL:
         yMin = 0;
         yMax = 10;
+        xMax = 10;
         yScale = 1;
         yLabel = "ms^-2";
         xStep = 1;
@@ -1549,10 +1576,13 @@ static void vSensorData(uint32_t *data, int dataSize, PlotType plotType, bool fi
         if (y2 > yStart)
             y2 = yStart;
 
-        if (filtered)
+        if (filtered){
             GrContextForegroundSet(&sContext, ClrRed);
-        else
+
+        }
+        else{
             GrContextForegroundSet(&sContext, ClrBlue);
+        }
         GrLineDraw(&sContext, x1, y1, x2, y2);
     }
     // Add labels for the axes
@@ -1562,14 +1592,15 @@ static void vSensorData(uint32_t *data, int dataSize, PlotType plotType, bool fi
     GrStringDraw(&sContext, yLabel, -1, 20, 33, false);                   // Y-axis label
     // Draw Y axis min/max labels
     GrContextFontSet(&sContext, g_psFontFixed6x8);
-    char yMinStr[8], yMaxStr[8];
+    char yMinStr[8], yMaxStr[8], xMaxStr[8];
     usprintf(yMinStr, "%u", yMin);
     usprintf(yMaxStr, "%u", yMax);
     GrContextForegroundSet(&sContext, ClrRed);
     GrStringDraw(&sContext, yMinStr, -1, xStart - 8, yStart - 8, false);
     GrStringDraw(&sContext, yMaxStr, -1, xStart - 8, yTop - 15, false);
     // Draw X axis labels
-    GrStringDraw(&sContext, "20", -1, 305, yStart + 6, false);
+    usprintf(xMaxStr, "%u", xMax);
+    GrStringDraw(&sContext, xMaxStr, -1, 305, yStart + 6, false);
 }
 void xTimerHandler(void)
 {
