@@ -1263,7 +1263,7 @@ static void prvDisplayTask(void *pvParameters)
     uint32_t buffer_data[100] = {0};
     uint32_t data_index = 0;
     bool plotRawData = false; // Flag to toggle between raw and filtered data
-    //
+    accel_threshold = 10;
     // Add the title block and the previous and next buttons to the widget
     // tree.
     //
