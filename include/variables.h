@@ -75,9 +75,9 @@ static inline float count_to_rpm(int count)
 }
 #define MOVING_AVERAGE_SAMPLES 60
 /* PID variables */
-#define Kp 0.008f
-#define Ki 0.008f 
-#define Kd 0.8f
+#define Kp 0.1f
+#define Ki 0.12f 
+#define Kd 30.8f
 
 /* Event bits */
 #define EVENT_HIGH_THRESHOLD (1 << 0)
