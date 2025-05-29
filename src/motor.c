@@ -260,7 +260,6 @@ static void prvCurrentReadTask(void *pvParameters)
             ADC_SENSOR = adcValues[0];
             ADC_SENSOR_4 = adcValues[1];
 
-
             voltage0 = (((float)ADC_SENSOR) / (float)ADC_MAX_VALUE) * VREF;
             voltage4 = (((float)ADC_SENSOR_4) / (float)ADC_MAX_VALUE) * VREF;
             voltageE = (voltage0 + voltage4) / 2.0f;
@@ -277,7 +276,6 @@ static void prvCurrentReadTask(void *pvParameters)
             // // I3 = -(I1+I2) + Motor_INEFFICIENCY
 
             raw_currentE = -(raw_current0 + raw_current4);
-
 
             power_raw0 = raw_current0 * MOTOR_NORMAL_VOLTAGE; // in Watts
             power_raw1 = raw_current4 * MOTOR_NORMAL_VOLTAGE; // in Watts
@@ -334,7 +332,7 @@ static void prvCurrentReadTask(void *pvParameters)
             power_raw = estimate_instantaneous_power(raw_current0, raw_current4);
             power_filtered = estimate_instantaneous_power(filtered_current1, filtered_current2);
 
-            if (((power_filtered / MOTOR_NORMAL_VOLTAGE)*1000) > current_thresh)
+            if (((power_filtered / MOTOR_NORMAL_VOLTAGE) * 1000) > current_thresh)
             {
                 // UARTprintf("Current threshold exceeded: %d, %d\n", (int)((power_filtered/MOTOR_NORMAL_VOLTAGE)*1000), current_thresh);
                 xEventGroupSetBits(xEventGroup, EVENT_ESTOP_TRIGGERED);
@@ -394,6 +392,24 @@ static void prvMotorPIDTask(void *parameters)
         if (xSemaphoreTake(xPIDTimerSemaphore, pdMS_TO_TICKS(2000)) != pdTRUE)
             continue;
 
+        EventBits_t uxBits = xEventGroupWaitBits(
+            xEventGroup,
+            EVENT_ESTOP_TRIGGERED,
+            pdFALSE, // does not clear bits after reading
+            pdFALSE, // Wait for any bit
+            0);      // Non-blocking
+
+        if (uxBits & EVENT_ESTOP_TRIGGERED)
+        {
+            if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
+            {
+                motor_ctrl.Estop = true;          // Set E-Stop flag
+                motor_ctrl.motor_enabled = false; // Disable motor
+                xSemaphoreGive(motor_ctrl.mutex);
+            }
+
+        }
+
         taskENTER_CRITICAL();
 
         /* clear stale data */
@@ -409,7 +425,8 @@ static void prvMotorPIDTask(void *parameters)
         if (!motor_ctrl.motor_enabled)
         {
             local_target_rpm = 0.0f;
-            if ((raw_rpm - 0.0f) < 0.01) disableMotor();
+            if ((raw_rpm - 0.0f) < 0.01)
+                disableMotor();
         }
         else
         {
