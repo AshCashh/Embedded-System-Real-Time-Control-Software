@@ -1388,7 +1388,7 @@ static void prvDisplayTask(void *pvParameters)
                 // print the buffer recieved data
                 // uint32_t prevIndex = (g_ui32LightDataIndex == 0) ? (LIGHT_DATA_BUFFER_SIZE - 1) : (g_ui32LightDataIndex - 1);
                 // UARTprintf("Light Data: %d, Count: %d\n", g_ui32LightDataBuffer[prevIndex], g_ui32LightDataCount);
-                // UARTprintf("%d, %d\n", xRxedStructure.uRaw, xRxedStructure.uFiltered);
+                UARTprintf("%d, %d\n", xRxedStructure.uRaw, xRxedStructure.uFiltered);
                 vSensorData(g_ui32LightDataBuffer, g_ui32LightDataCount, PLOT_LIGHT, plotRawData);
             }
             else
@@ -1403,7 +1403,7 @@ static void prvDisplayTask(void *pvParameters)
                 g_ui32AccelDataBuffer[g_ui32AccelDataIndex] = plotRawData ? xRxedStructure.uRaw : xRxedStructure.uFiltered;
                 g_ui32AccelDataIndex = (g_ui32AccelDataIndex + 1) % ACCEL_DATA_BUFFER_SIZE;
                 // uint32_t prevIndex = (g_ui32AccelDataIndex == 0) ? (ACCEL_DATA_BUFFER_SIZE - 1) : (g_ui32AccelDataIndex - 1);
-                // UARTprintf("%d, %d\n", xRxedStructure.uRaw, xRxedStructure.uFiltered);
+                UARTprintf("%d, %d\n", xRxedStructure.uRaw, xRxedStructure.uFiltered);
 
                 if (g_ui32AccelDataCount < ACCEL_DATA_BUFFER_SIZE)
                     g_ui32AccelDataCount++;
@@ -1416,7 +1416,7 @@ static void prvDisplayTask(void *pvParameters)
             {
                 g_ui32RPMDataBuffer[g_ui32RPMDataIndex] = plotRawData ? xRxedStructure.uRaw : xRxedStructure.uFiltered;
                 g_ui32RPMDataIndex = (g_ui32RPMDataIndex + 1) % RPM_DATA_BUFFER_SIZE;
-                // UARTprintf("%d, %d\n", xRxedStructure.uRaw, xRxedStructure.uFiltered);
+                UARTprintf("%d, %d\n", xRxedStructure.uRaw, xRxedStructure.uFiltered);
                 if (g_ui32RPMDataCount < RPM_DATA_BUFFER_SIZE)
                     g_ui32RPMDataCount++;
                 vSensorData(g_ui32RPMDataBuffer, g_ui32RPMDataCount, PLOT_RPM, plotRawData);
@@ -1432,6 +1432,7 @@ static void prvDisplayTask(void *pvParameters)
             {
                 g_ui32PowerDataBuffer[g_ui32PowerDataIndex] = plotRawData ? xRxedStructure.uRaw : xRxedStructure.uFiltered;
                 g_ui32PowerDataIndex = (g_ui32PowerDataIndex + 1) % POWER_DATA_BUFFER_SIZE;
+                UARTprintf("%d, %d\n", xRxedStructure.uRaw, xRxedStructure.uFiltered);
                 if (g_ui32PowerDataCount < POWER_DATA_BUFFER_SIZE)
                     g_ui32PowerDataCount++;
                 vSensorData(g_ui32PowerDataBuffer, g_ui32PowerDataCount, PLOT_POWER, plotRawData);
