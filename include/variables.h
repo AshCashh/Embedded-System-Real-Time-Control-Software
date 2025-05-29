@@ -69,7 +69,7 @@
 #define MAX_DECELERATION_RPMS (ACCELERATION_TOLERANCE * 500.0f)
 #define ESTOP_DECELERATION_RPMS (ACCELERATION_TOLERANCE * 1000.0f)
 
-static inline float count_to_rpm(int count)
+static inline float count_to_rpm(uint32_t count)
 {
     return ((float)count / COUNT_PER_REVOLUTION) * PID_FREQUENCY * SECONDS_PER_MINUTE;
 }

@@ -42,7 +42,6 @@
  * message by use of vTaskDelete.  The loop also includes a one second delay
  * that is achieved by using vTaskDelay.
  *
- * This example uses UARTprintf for output of UART messages.  UARTprintf is not
  * a thread-safe API and is only being used for simplicity of the demonstration
  * and in a controlled manner.
  *
@@ -79,9 +78,6 @@
 
 extern motorcontrol_t motor_ctrl;
 
-volatile float latest_rpm;
-volatile uint32_t last_tick = 0;
-uint32_t last_hall_update = 0;
 volatile uint32_t count = 0;
 /*
  * Time stamp global variable.
@@ -234,14 +230,12 @@ static void prvCurrentReadTask(void *pvParameters)
 
     power_filtered = 0.0f;
 
-    UARTprintf("Current Read Task Started\n");
     AMessage xMessage;
 
     for (;;)
     {
         if (xSemaphoreTake(xPowerMotorCalcsemaphore, pdMS_TO_TICKS(1000)) == pdTRUE)
         {
-            //  UARTprintf("before trigger\n");
             // Read conversion results
             ADCSequenceDataGet(ADC1_BASE, 1, adcValues);
             uint32_t ADC_SENSOR, ADC_SENSOR_4;
@@ -251,7 +245,6 @@ static void prvCurrentReadTask(void *pvParameters)
             ADC_SENSOR = adcValues[0];
             ADC_SENSOR_4 = adcValues[1];
 
-            // UARTprintf("ADC Values: %d, %d,%d\n", ADC_SENSOR, ADC_SENSOR_4,(ADC_SENSOR - ADC_SENSOR_4));
 
             voltage0 = (((float)ADC_SENSOR) / (float)ADC_MAX_VALUE) * VREF;
             voltage4 = (((float)ADC_SENSOR_4) / (float)ADC_MAX_VALUE) * VREF;
@@ -270,7 +263,6 @@ static void prvCurrentReadTask(void *pvParameters)
 
             raw_currentE = -(raw_current0 + raw_current4);
 
-            // UARTprintf("%d,%d,%d\n", (int)(1000*current0), (int)(1000*current4), (int)(1000*(currentE)));
 
             power_raw0 = raw_current0 * MOTOR_NORMAL_VOLTAGE; // in Watts
             power_raw1 = raw_current4 * MOTOR_NORMAL_VOLTAGE; // in Watts
@@ -323,22 +315,12 @@ static void prvCurrentReadTask(void *pvParameters)
             filtered_currentE = current_e_sum / (float)ADC_CURRENT_SAMPLES;
 
                     
-            // UARTprintf("%d, %d, %d\n", (int)(1000 * filtered_current1), (int)(1000 * filtered_current2), (int)(1000 * filtered_currentE));
             power_raw = estimate_instantaneous_power(raw_current0, raw_current4);
             power_filtered = estimate_instantaneous_power(filtered_current1, filtered_current2);
-            // UARTprintf("%d,%d\n", (int)(power_raw*1000),(int)(power_filtered*1000));
             xMessage.uFiltered = (uint32_t)(power_filtered * 1000); // Convert to mA
             xMessage.uRaw = (uint32_t)(power_raw * 1000);           // Convert to mA
             xMessage.ulTimeStamp = xTaskGetTickCount();
-            // UARTprintf("Sending message\n");
-            if (xQueueSend(xPowerQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
-            {
-                // UARTprintf("Current sent: %d\n", xMessage.uRaw);
-            }
-            else
-            {
-                // UARTprintf("Error CURRENT: Failed to send data to the queue\n");
-            }
+            xQueueSend(xPowerQueue, (void *)&xMessage, (TickType_t)0);
         }
 
         // Use current0 and current4 in control logic or print/log
@@ -388,13 +370,15 @@ static void prvMotorPIDTask(void *parameters)
         // {
         //     raw_rpm = 0;
         // }
-        raw_rpm = latest_rpm;
+        raw_rpm = count_to_rpm(count);
+        count = 0;
         local_target_rpm = motor_ctrl.target_rpm;
         local_period = motor_ctrl.period_value;
         /* don't accumulate error if in stop state */
         if (!motor_ctrl.motor_enabled)
         {
             local_target_rpm = 0.0f;
+            if ((raw_rpm - 0.0f) < 0.01) disableMotor();
         }
         else
         {
@@ -466,7 +450,6 @@ static void prvMotorPIDTask(void *parameters)
             ;
         {
         }
-        // UARTprintf("%d, %d,  %d, %d, %d\n",
         //            (int)rpm, (int)raw_rpm, (int)local_target_rpm, (int)ramped_target_rpm, (int)avg_acceleration);
     }
 }
@@ -491,12 +474,6 @@ void HallSensorHandler(void)
     GPIOIntClear(GPIO_PORTH_BASE, ui32StatusH);
     GPIOIntClear(GPIO_PORTN_BASE, ui32StatusN);
     count++;
-    last_hall_update = xTaskGetTickCountFromISR();
-    uint32_t tick_delta = last_hall_update - last_tick;
-    last_tick = last_hall_update;
-    float minute_delta = TICKS_TO_MINUTES(tick_delta);
-    if (minute_delta > 0)
-        latest_rpm = 1 / (COUNT_PER_REVOLUTION * minute_delta);
     updateMotor();
     // xSemaphoreGiveFromISR(xPowerMotorCalcsemaphore, &xMotorTaskWoken);
 }
@@ -524,11 +501,9 @@ void xPIDTimerHandler(void)
 
 void prvMotorStart()
 {
-    // UARTprintf("Motor task started\n");
     if (motor_ctrl.mutex == NULL)
     {
         // Handle error
-        // UARTprintf("Failed to create mutex\n");
     }
 
     // configure buttons
@@ -548,14 +523,12 @@ void prvMotorStart()
     else
     {
         // Handle error
-        // UARTprintf("Failed to take mutex\n");
     }
     /* start motor phase cycle */
     // enableMotor();
     /* Kick start the motor */
     // Do an initial read of the hall effect sensor GPIO lines
     /* read hall sensor gpio lines */
-    // UARTprintf("Getting hall values\n");
     if (xSemaphoreTake(motor_ctrl.mutex, portMAX_DELAY) == pdTRUE)
     {
         updateMotor();
@@ -564,7 +537,6 @@ void prvMotorStart()
     else
     {
         // Handle error
-        // UARTprintf("Failed to take mutex\n");
     }
 }
 
