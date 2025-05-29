@@ -91,8 +91,8 @@ extern motorcontrol_t motor_ctrl;
 
 #define RPM_MIN 0
 #define RPM_MAX 5000
-extern uint32_t accel_threshold;
-extern uint32_t current_threshold;
+uint32_t accel_threshold;
+uint32_t current_threshold;
 //*****************************************************************************
 //
 // The error routine that is called if the driver library encounters an error.

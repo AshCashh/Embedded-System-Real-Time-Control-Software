@@ -130,12 +130,10 @@ extern SemaphoreHandle_t xEmergencyMutex;
 extern SemaphoreHandle_t xI2CMutex;
 
 extern uint32_t g_ui32SysClock;
-extern uint32_t accel_threshold;
 
 tContext sContext;
 // Moving average filter variables
-#define FILTER_SIZE 20
-#define CRASH_LIMIT 2
+#define FILTER_SIZE 5
 static float filterBufferX[FILTER_SIZE] = {0};
 static float filterBufferY[FILTER_SIZE] = {0};
 static float filterBufferZ[FILTER_SIZE] = {0};
@@ -304,14 +302,17 @@ static void prvAccelTask(void *pvParameters)
                 xMessage.ulTimeStamp = xTaskGetTickCount();
                 xMessage.uFiltered = (uint32_t)((avgAbsAccel - 0.3f) * 10.0f);
                 xMessage.uRaw = (uint32_t)((avgAbsAccel_raw - 0.3f) * 10.0f);
-                if (xSemaphoreTake(xEmergencyMutex, pdMS_TO_TICKS(10)) == pdTRUE)
+                // bool high_flag = (xMessage.uFiltered >= accel_threshold);
+                // if (high_flag) 
+                //     UARTprintf("TRIGGERED\n");
+                //     high_flag = false;
+                xSemaphoreTake(xEmergencyMutex, pdMS_TO_TICKS(100));
+                if (xMessage.uFiltered >= accel_threshold)
                 {
-                    if (xMessage.uRaw * 7 >= accel_threshold)
-                    {
-                        xEventGroupSetBits(xEventGroup, EVENT_ESTOP_TRIGGERED);
-                    }
-                    xSemaphoreGive(xEmergencyMutex);
+                    xEventGroupSetBits(xEventGroup, EVENT_ESTOP_TRIGGERED);
                 }
+                xSemaphoreGive(xEmergencyMutex);
+
 
                 if (xQueueSend(xAccelQueue, (void *)&xMessage, (TickType_t)0) == pdPASS)
                 {
@@ -326,6 +327,7 @@ static void prvAccelTask(void *pvParameters)
                     //UARTprintf("|%d\n", seconds++);
                     // UBaseType_t watermark = uxTaskGetStackHighWaterMark(NULL);
                     // UARTprintf("[D] Stack high watermark: %d\n", watermark);
+                    UARTprintf("ACC: %d\n", accel_threshold);
                     counter = 0;
                 }
                 counter++;
