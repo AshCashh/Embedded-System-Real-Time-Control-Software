@@ -151,7 +151,7 @@ void vCreateMotorTask(void)
 
     xTaskCreate(prvMotorPIDTask,
                 "MotorPID",
-                configMINIMAL_STACK_SIZE,
+                512,
                 NULL,
                 tskIDLE_PRIORITY + 3,
                 NULL);
@@ -182,12 +182,12 @@ void vCreateMotorTask(void)
 //     IntMasterEnable();
 // }
 
-float estimate_instantaneous_power(float i_a, float i_b) {
+float estimate_instantaneous_power(float i_a, float i_b)
+{
     float i_c = -(i_a + i_b);
-    float i_rms_equiv = sqrtf((i_a*i_a + i_b*i_b + i_c*i_c) / 3.0f);
+    float i_rms_equiv = sqrtf((i_a * i_a + i_b * i_b + i_c * i_c) / 3.0f);
     return MOTOR_NORMAL_VOLTAGE * i_rms_equiv;
 }
-
 
 static void prvCurrentReadTask(void *pvParameters)
 {
@@ -204,6 +204,8 @@ static void prvCurrentReadTask(void *pvParameters)
     static float current_e_buffer[MOVING_AVERAGE_SAMPLES] = {0};
     static float current_e_sum = 0.0f;
 
+    static uint32_t current_thresh = (AMPS_TO_MILLIAMPS(100)); // in Amps, massive value to start with
+
     float Static_point1, Static_point2;
     Static_point1 = 0.0f; // Initial static point for current difference
     Static_point2 = 0.0f; // Initial static point for current difference
@@ -219,6 +221,9 @@ static void prvCurrentReadTask(void *pvParameters)
 
     float filtered_current1, filtered_current2, filtered_currentE;
 
+    static float power_buffer[MOVING_AVERAGE_SAMPLES] = {0};
+    static float power_buffer_sum = 0.0f;
+
     float power0_filtered, power1_filtered, powerE_filtered;
     float power_raw0, power_raw1, power_rawE;
 
@@ -226,8 +231,8 @@ static void prvCurrentReadTask(void *pvParameters)
     filtered_current2 = 0.0f;
     filtered_currentE = 0.0f;
 
-    float power_raw, power_filtered;
-
+    float power_raw, power_filtered, power_filtered_2;
+    power_filtered_2 = 0.0f;
     power_filtered = 0.0f;
 
     AMessage xMessage;
@@ -236,6 +241,16 @@ static void prvCurrentReadTask(void *pvParameters)
     {
         if (xSemaphoreTake(xPowerMotorCalcsemaphore, pdMS_TO_TICKS(1000)) == pdTRUE)
         {
+            if (xSemaphoreTake(motor_ctrl.mutex, pdMS_TO_TICKS(10)) == pdTRUE)
+            {
+                current_thresh = motor_ctrl.current_limit;
+                xSemaphoreGive(motor_ctrl.mutex);
+                if (current_thresh < 100)
+                {
+                    current_thresh = AMPS_TO_MILLIAMPS(100); // Reset to a default value if too low
+                }
+            }
+            //  UARTprintf("before trigger\n");
             // Read conversion results
             ADCSequenceDataGet(ADC1_BASE, 1, adcValues);
             uint32_t ADC_SENSOR, ADC_SENSOR_4;
@@ -275,10 +290,11 @@ static void prvCurrentReadTask(void *pvParameters)
                 // Reset the large count and averages
                 Static_point1 = Static_point1 + (Large_Current_1_Average / (float)ADC_CURRENT_SAMPLES_AVERAGE_FIX);
                 Static_point2 = Static_point2 + (Large_Current_2_Average / (float)ADC_CURRENT_SAMPLES_AVERAGE_FIX);
+                Static_point1 = clamp(Static_point1, -0.5f, 0.5f); // Clamp to reasonable values
+                Static_point2 = clamp(Static_point2, -0.5f, 0.5f); // Clamp to reasonable values
                 large_count = 0;
                 Large_Current_1_Average = 0.0f;
                 Large_Current_2_Average = 0.0f;
-
             }
             large_count++;
 
@@ -314,11 +330,26 @@ static void prvCurrentReadTask(void *pvParameters)
             current_e_sum += raw_currentE;
             filtered_currentE = current_e_sum / (float)ADC_CURRENT_SAMPLES;
 
-                    
+            // UARTprintf("%d, %d, %d\n", (int)(1000 * filtered_current1), (int)(1000 * filtered_current2), (int)(1000 * filtered_currentE));
             power_raw = estimate_instantaneous_power(raw_current0, raw_current4);
             power_filtered = estimate_instantaneous_power(filtered_current1, filtered_current2);
-            xMessage.uFiltered = (uint32_t)(power_filtered * 1000); // Convert to mA
-            xMessage.uRaw = (uint32_t)(power_raw * 1000);           // Convert to mA
+
+            if (((power_filtered / MOTOR_NORMAL_VOLTAGE)*1000) > current_thresh)
+            {
+                // UARTprintf("Current threshold exceeded: %d, %d\n", (int)((power_filtered/MOTOR_NORMAL_VOLTAGE)*1000), current_thresh);
+                xEventGroupSetBits(xEventGroup, EVENT_ESTOP_TRIGGERED);
+                // UARTprintf("Emergency stop acknowledged\n");
+            }
+
+            power_buffer_sum -= power_buffer[current_index];
+            power_buffer[current_index] = power_filtered;
+            power_buffer_sum += power_buffer[current_index];
+
+            power_filtered_2 = power_buffer_sum / (float)MOVING_AVERAGE_SAMPLES;
+
+            // UARTprintf("%d,%d\n", (int)(power_raw * 1000), (int)(power_filtered * 1000));
+            xMessage.uFiltered = (uint32_t)(power_filtered_2 * 1000); // Convert to mW
+            xMessage.uRaw = (uint32_t)(power_raw * 1000);             // Convert to mW
             xMessage.ulTimeStamp = xTaskGetTickCount();
             xQueueSend(xPowerQueue, (void *)&xMessage, (TickType_t)0);
         }
@@ -405,7 +436,7 @@ static void prvMotorPIDTask(void *parameters)
         accel_index = (accel_index + 1) % MOVING_AVERAGE_SAMPLES;
         float avg_acceleration = accel_sum / (float)MOVING_AVERAGE_SAMPLES;
         /* clamp local target rpm to prevent overshooting acceleration */
-        
+
         if ((local_target_rpm - ramped_target_rpm) > max_accel_delta)
         {
             ramped_target_rpm += max_accel_delta;
@@ -418,7 +449,7 @@ static void prvMotorPIDTask(void *parameters)
         {
             ramped_target_rpm = local_target_rpm;
             /* use actual rpm to as reference now */
-        } 
+        }
 
         /* send rpm in queue */
         xMessage.ulTimeStamp = xTaskGetTickCount();

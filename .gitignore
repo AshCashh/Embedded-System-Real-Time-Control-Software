@@ -22,6 +22,7 @@ __MACOSX/
 .ipynb_checkpoints/
 __pycache__/
 *.pyc
+platformio.ini
 
 # PlatformIO library registry
 lib_deps/
