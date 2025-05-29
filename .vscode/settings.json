@@ -11,6 +11,7 @@
         "istream": "c",
         "streambuf": "c",
         "common.h": "c",
-        "variables.h": "c"
+        "variables.h": "c",
+        "stdbool.h": "c"
     }
 }

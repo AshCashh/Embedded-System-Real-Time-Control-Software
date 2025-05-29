@@ -409,7 +409,7 @@ static void prvMotorPIDTask(void *parameters)
         if (!motor_ctrl.motor_enabled)
         {
             local_target_rpm = 0.0f;
-            if ((raw_rpm - 0.0f) < 0.01) disableMotor();
+            if ((int)raw_rpm < 10) disableMotor();
         }
         else
         {
@@ -435,20 +435,20 @@ static void prvMotorPIDTask(void *parameters)
         accel_sum += acceleration;
         accel_index = (accel_index + 1) % MOVING_AVERAGE_SAMPLES;
         float avg_acceleration = accel_sum / (float)MOVING_AVERAGE_SAMPLES;
-        /* clamp local target rpm to prevent overshooting acceleration */
+        /* Clamp ramped target to enforce max acceleration relative to actual RPM */
+        float delta_rpm = local_target_rpm - rpm;
 
-        if ((local_target_rpm - ramped_target_rpm) > max_accel_delta)
+        if (delta_rpm > max_accel_delta)
         {
-            ramped_target_rpm += max_accel_delta;
+            ramped_target_rpm = rpm + max_accel_delta;
         }
-        else if ((local_target_rpm - ramped_target_rpm) < -max_decel_delta)
+        else if (delta_rpm < -max_decel_delta)
         {
-            ramped_target_rpm -= max_decel_delta;
+            ramped_target_rpm = rpm - max_decel_delta;
         }
         else
         {
             ramped_target_rpm = local_target_rpm;
-            /* use actual rpm to as reference now */
         }
 
         /* send rpm in queue */
@@ -473,15 +473,12 @@ static void prvMotorPIDTask(void *parameters)
         }
 
         setDuty(local_duty);
-        // if (need_disable)
-        //     disableMotor();
         xMessage.uFiltered = (uint32_t)(rpm);
         xMessage.uRaw = (uint32_t)(raw_rpm);
         if (xQueueSend(xMotorRPMQueue, (void *)&xMessage, (TickType_t)0) != pdPASS)
             ;
         {
         }
-        //            (int)rpm, (int)raw_rpm, (int)local_target_rpm, (int)ramped_target_rpm, (int)avg_acceleration);
     }
 }
 
@@ -549,6 +546,7 @@ void prvMotorStart()
         setDuty(motor_ctrl.duty_value);
         motor_ctrl.motor_enabled = false;
         motor_ctrl.acceleration = 0;
+        disableMotor();
         xSemaphoreGive(motor_ctrl.mutex);
     }
     else
@@ -564,10 +562,6 @@ void prvMotorStart()
     {
         updateMotor();
         xSemaphoreGive(motor_ctrl.mutex);
-    }
-    else
-    {
-        // Handle error
     }
 }
 
