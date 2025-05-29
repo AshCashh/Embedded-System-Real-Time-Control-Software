@@ -402,11 +402,6 @@ void OnLimitSliderChange(tWidget *psWidget, int32_t i32Value)
         xSemaphoreGive(xEmergencyMutex);
         usprintf(pcText6, "Acceleration: %d ms^-2", i32Value);
         SliderTextSet(&g_psLimitSliders[1], pcText6);
-        if (xSemaphoreTake(motor_ctrl.mutex, pdMS_TO_TICKS(100)) == pdTRUE)
-        {
-            motor_ctrl.acceleration_limit = i32Value;
-            xSemaphoreGive(motor_ctrl.mutex);
-        }
     }
     WidgetPaint(psWidget);
 }
