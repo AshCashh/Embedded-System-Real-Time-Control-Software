@@ -1,5 +1,7 @@
+
 # Embedded-System-Real-Time-Control-Software
 As an embedded systems engineer, this repository outlines the work done for an automotive manufacturer transitioning to battery-electric technology. Your task is to design the real-time sensing, motor control, and user interface software for the embedded system of an electric vehicle.
+
 
 ## Objectives
 
@@ -42,3 +44,14 @@ $$I_{\text{SOx}} = \frac{1.65 - V_{\text{SOx}}}{0.7} $$
 
 **Course:** EGH456 Embedded Systems  
 **University:** Queensland University of Technology (QUT)
+
+page 31 drv8323 for motors
+
+
+## Motor todo list 
+[] Desired rpm
+[] Control loop
+[] Within deceleration and acceleration spec
+[] E-stop
+[] Event queue trigger for conditions
+[] Current sensing

@@ -1,0 +1,17 @@
+{
+    "files.associations": {
+        "motorlib.h": "c",
+        "limits": "c",
+        "type_traits": "c",
+        "cmath": "c",
+        "functional": "c",
+        "array": "c",
+        "tuple": "c",
+        "utility": "c",
+        "istream": "c",
+        "streambuf": "c",
+        "common.h": "c",
+        "variables.h": "c",
+        "stdbool.h": "c"
+    }
+}

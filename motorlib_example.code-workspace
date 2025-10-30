@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "../motorlib_example"
+		},
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"motorlib.h": "c",
+			"pwm.h": "c"
+		}
+	}
+}

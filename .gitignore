@@ -1,0 +1,52 @@
+﻿# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+__MACOSX/
+# VSCode settings
+.vscode/
+
+# PlatformIO build files
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# PlatformIO misc files
+.piomemcache/
+.pio_test/
+.test/
+.clang_complete
+.ccls-cache/
+.ipynb_checkpoints/
+__pycache__/
+*.pyc
+platformio.ini
+
+# PlatformIO library registry
+lib_deps/
+
+# Compiled object files
+*.elf
+*.hex
+*.bin
+*.map
+*.o
+*.d
+
+# IDE backups and temp files
+*~ 
+*.swp
+*.bak
+*.tmp
+
+# Logs
+*.log
+
+# Other system files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+
